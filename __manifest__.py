@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 {
-    'name': "users_pf",
+    'name': "pf_data",
 
     'summary': """
-        Импорт юзеров из ПланФикса 
+       Импорт данных из API ПланФикса для модуля docflow 
     """,
 
     'description': """
-        Импорт юзеров из ПланФикса 
+       Импорт данных из API ПланФикса для модуля docflow 
+        (документооборот для flectra в стиле Планфикс) 
     """,
 
     'author': "Денис Алексеев",
@@ -16,11 +17,11 @@
     # Categories can be used to filter modules in modules listing
     # Check https://github.com/flectra/flectra/blob/master/flectra/addons/base/module/module_data.xml
     # for the full list
-    'category': 'Human Resources',
-    'version': '0.0.3',
+    'category': 'Sign',
+    'version': '0.0.17',
 
     # any module necessary for this one to work correctly
-    'depends': ['base'],
+    'depends': ['base', 'project', 'docflow'],
 
     # always loaded
     'data': [
