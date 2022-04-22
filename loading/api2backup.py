@@ -28,6 +28,7 @@ def api_load_from_list(api_method, obj_name, file_name, api_additionally='',
     key_name - имя идентификатора (id или key)
     """
     global limit_overflow
+    global request_count
     if limit_overflow:
         return {}
     if res_dict is None:
@@ -61,6 +62,7 @@ def api_load_from_list(api_method, obj_name, file_name, api_additionally='',
                         continuation = False
                     break
                 objs_loaded = []
+                request_count += 1
                 try:
                     if pagination:
                         answer = requests.post(
@@ -178,6 +180,7 @@ def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, 
 
 
 def reload_all():
+    global request_count
     global limit_overflow
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
           'Получаем из АПИ юзеров, сотрудников, контакты, группы доступа и шаблоны задач')
@@ -189,9 +192,9 @@ def reload_all():
     api_load_from_list('task.getList', 'task', 'tasktemplates_full.json',
                        api_additionally='<target>template</target>')
 
-    print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Загружаем ранее полученный из АПИ список файлов')
-    min_task = 18223058  # До этой задачи (84268 от 30 ноября 2021) задачи без файлов в дальнейшем не будут проверяться
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
+          'Загружаем ранее полученный из АПИ список файлов. Потрачено запросов:', request_count)
+    min_task = 18226506  # До этой задачи (84268 от 30 ноября 2021) задачи без файлов в дальнейшем не будут проверяться
     task_numbers_from_loaded_files = set()
     task_without_files = []
     task_without_files_general = []
@@ -206,7 +209,8 @@ def reload_all():
     task_numbers_from_loaded_files = tuple(task_numbers_from_loaded_files)
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Загружаем бэкап задач из выгрузки всех задач (task.getMulti скорректированной task.get) через АПИ ПФ')
+          'Загружаем бэкап задач (task.getMulti скорректированной task.get) через АПИ ПФ. Потрачено запросов:',
+          request_count)
     tasks_full = {}
     all_tasks_ids = set()
     with open(os.path.join(PF_BACKUP_DIRECTORY, 'tasks_full.json'), 'r') as read_file:
@@ -223,14 +227,14 @@ def reload_all():
     task_without_files = tuple(task_without_files)
     #task_without_files_general = tuple(task_without_files_general)
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), len(task_without_files),
-          'задач без файлов в дальнейшем не будут проверяться (до задачи 84268 от 30 ноября 2021)')
+          'задач без файлов в дальнейшем не будут проверяться (до задачи 85907 от 20 декабря 2021)')
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
           'Получаем из АПИ дерево проектов (переименовал внутри flectra в hr.projectgroup)')
     projectgroups = api_load_from_list('project.getList', 'project', 'projectgroups_full.json')
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ список файлов по каждому проекту')
+          'Получаем из АПИ список файлов по каждому проекту. Потрачено запросов:', request_count)
     if not limit_overflow:
         if len(argv) == 1:
             printProgressBar(0, len(projectgroups) + 1, prefix='Скачаны все файлы по:', suffix='проектов', length=50)
@@ -245,7 +249,7 @@ def reload_all():
                 printProgressBar(i, len(projectgroups) + 1, prefix='Скачаны все файлы по:', suffix='проектов', length=50)
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ список файлов по каждому контакту')
+          'Получаем из АПИ список файлов по каждому контакту. Потрачено запросов:', request_count)
     if not limit_overflow:
         if len(argv) == 1:
             printProgressBar(0, len(contacts) + 1, prefix='Скачаны все файлы по:', suffix='контактов', length=50)
@@ -261,7 +265,7 @@ def reload_all():
                 printProgressBar(i, len(contacts) + 1, prefix='Скачаны все файлы по:', suffix='контактов', length=50)
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ файлы по каждой задаче')
+          'Получаем из АПИ файлы по каждой задаче. Потрачено запросов:', request_count)
     if not limit_overflow:
         if len(argv) == 1:
             printProgressBar(0, len(tasks_full) + 1, prefix='Скачаны все файлы по:', suffix='задач', length=50)
@@ -276,13 +280,15 @@ def reload_all():
                         files[file] = files_loaded[file]
             if len(argv) == 1:
                 printProgressBar(i, len(tasks_full) + 1, prefix='Скачаны все файлы по:', suffix='задач', length=50)
+            else:
+                print('Задача', i, 'из', len(tasks_full), 'Потрачено запросов:', request_count)
         print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
               'Сохраняем результирующий список файлов')
         with open(os.path.join(PF_BACKUP_DIRECTORY, 'files_full.json'), 'w') as write_file:
             json.dump(files, write_file, ensure_ascii=False)
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ список справочников')
+          'Получаем из АПИ список справочников. Потрачено запросов:', request_count)
     handbooks = api_load_from_list('handbook.getList', 'handbook', '', pagination=False)
     if not limit_overflow:
         if len(argv) == 1:
@@ -298,7 +304,7 @@ def reload_all():
             json.dump(handbooks, write_file, ensure_ascii=False)
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ список процессов и список статусов по каждому процессу')
+          'Получаем из АПИ список процессов и список статусов по каждому процессу. Потрачено запросов:', request_count)
     processes = api_load_from_list('taskStatus.getSetList', 'taskStatusSet', 'processes_full.json',
                                    pagination=False)
     statuses = {}
@@ -344,7 +350,7 @@ def reload_all():
         actions[int(action)] = actions_str[action]
     print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Из сохраненных комментариев:', len(actions))
 
-    print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Догружаем комментарии')
+    print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Догружаем комментарии. Потрачено запросов:', request_count)
     addition_text = '<fromDate>' \
                     + (datetime.strptime(actions[max(actions.keys())]['dateTime'], '%d-%m-%Y %H:%M') -
                        timedelta(minutes=1)).strftime('%d-%m-%Y %H:%M') \
@@ -355,7 +361,7 @@ def reload_all():
                        api_additionally=addition_text, res_dict=actions)
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ бэкап задач из выгрузки списка задач (task.getList)')
+          'Получаем из АПИ бэкап задач из выгрузки списка задач (task.getList). Потрачено запросов:', request_count)
     tasks_short = api_load_from_list('task.getList', 'task', 'tasks_short.json',
                                      api_additionally='<target>all</target>')
     for task in tasks_short:
@@ -478,9 +484,11 @@ def reload_all():
                 print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Удалено:', len(deleted_tasks_ids), 'осталось:', len(tasks_full_checked))
                 with open(os.path.join(PF_BACKUP_DIRECTORY, 'tasks_full.json'), 'w') as write_file:
                         json.dump(tasks_full_checked, write_file, ensure_ascii=False)
+    print('ВСЕГО потрачено запросов:', request_count)
 
 
 if __name__ == "__main__":
+    request_count = 0
     limit_overflow = False
     reload_all()
 
