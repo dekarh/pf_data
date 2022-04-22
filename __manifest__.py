@@ -27,9 +27,9 @@
     'data': [
         # 'security/ir.model.access.csv',
         'views/views.xml',
-        'data/res.users.csv',
         'data/hr_pf_data.xml',
-        'data/docflow_data.xml',        
+        'data/docflow_data.xml',
+        'data/res.users.csv',
     ],
     # only loaded in demonstration mode
     'demo': [

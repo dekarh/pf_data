@@ -183,16 +183,6 @@ def reload_all():
     global request_count
     global limit_overflow
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ юзеров, сотрудников, контакты, группы доступа и шаблоны задач')
-    api_load_from_list('user.getList', 'user', 'users_full.json')
-    api_load_from_list('contact.getList', 'contact', 'contacts_finfort.json' ,
-                       api_additionally='<target>6532326</target>')
-    contacts = api_load_from_list('contact.getList', 'contact', 'contacts_full.json')
-    api_load_from_list('userGroup.getList', 'userGroup', 'usergroups_full.json')
-    api_load_from_list('task.getList', 'task', 'tasktemplates_full.json',
-                       api_additionally='<target>template</target>')
-
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
           'Загружаем ранее полученный из АПИ список файлов. Потрачено запросов:', request_count)
     min_task = 18226506  # До этой задачи (84268 от 30 ноября 2021) задачи без файлов в дальнейшем не будут проверяться
     task_numbers_from_loaded_files = set()
@@ -230,6 +220,40 @@ def reload_all():
           'задач без файлов в дальнейшем не будут проверяться (до задачи 85907 от 20 декабря 2021)')
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
+          'Получаем из АПИ файлы по каждой задаче. Потрачено запросов:', request_count)
+    if not limit_overflow:
+        if len(argv) == 1:
+            printProgressBar(0, len(tasks_full) + 1, prefix='Скачаны все файлы по:', suffix='задач', length=50)
+        for i, task in enumerate(tasks_full):
+            if task not in task_without_files:
+                addition_text = '<task><id>' + str(task) + '</id></task>' \
+                                + '<returnDownloadLinks>1</returnDownloadLinks>'
+                files_loaded = api_load_from_list('file.getListForTask', 'file', '',
+                                                  api_additionally=addition_text)
+                for file in files_loaded:
+                    if not files.get(file, None):
+                        files[file] = files_loaded[file]
+            if len(argv) == 1:
+                printProgressBar(i, len(tasks_full) + 1, prefix='Скачаны все файлы по:', suffix='задач', length=50)
+            else:
+                print('Задача', i, 'из', len(tasks_full), 'Потрачено запросов:', request_count)
+        print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
+              'Сохраняем результирующий список файлов')
+        with open(os.path.join(PF_BACKUP_DIRECTORY, 'files_full.json'), 'w') as write_file:
+            json.dump(files, write_file, ensure_ascii=False)
+
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
+          'Получаем из АПИ юзеров, сотрудников, контакты, группы доступа и шаблоны задач. Потрачено запросов:',
+          request_count)
+    api_load_from_list('user.getList', 'user', 'users_full.json')
+    api_load_from_list('contact.getList', 'contact', 'contacts_finfort.json' ,
+                       api_additionally='<target>6532326</target>')
+    contacts = api_load_from_list('contact.getList', 'contact', 'contacts_full.json')
+    api_load_from_list('userGroup.getList', 'userGroup', 'usergroups_full.json')
+    api_load_from_list('task.getList', 'task', 'tasktemplates_full.json',
+                       api_additionally='<target>template</target>')
+
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
           'Получаем из АПИ дерево проектов (переименовал внутри flectra в hr.projectgroup)')
     projectgroups = api_load_from_list('project.getList', 'project', 'projectgroups_full.json')
 
@@ -263,29 +287,6 @@ def reload_all():
                 files[file]['contragent'] = contact
             if len(argv) == 1:
                 printProgressBar(i, len(contacts) + 1, prefix='Скачаны все файлы по:', suffix='контактов', length=50)
-
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ файлы по каждой задаче. Потрачено запросов:', request_count)
-    if not limit_overflow:
-        if len(argv) == 1:
-            printProgressBar(0, len(tasks_full) + 1, prefix='Скачаны все файлы по:', suffix='задач', length=50)
-        for i, task in enumerate(tasks_full):
-            if task not in task_without_files:
-                addition_text = '<task><id>' + str(task) + '</id></task>' \
-                                + '<returnDownloadLinks>1</returnDownloadLinks>'
-                files_loaded = api_load_from_list('file.getListForTask', 'file', '',
-                                                  api_additionally=addition_text)
-                for file in files_loaded:
-                    if not files.get(file, None):
-                        files[file] = files_loaded[file]
-            if len(argv) == 1:
-                printProgressBar(i, len(tasks_full) + 1, prefix='Скачаны все файлы по:', suffix='задач', length=50)
-            else:
-                print('Задача', i, 'из', len(tasks_full), 'Потрачено запросов:', request_count)
-        print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-              'Сохраняем результирующий список файлов')
-        with open(os.path.join(PF_BACKUP_DIRECTORY, 'files_full.json'), 'w') as write_file:
-            json.dump(files, write_file, ensure_ascii=False)
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
           'Получаем из АПИ список справочников. Потрачено запросов:', request_count)

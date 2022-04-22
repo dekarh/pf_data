@@ -204,10 +204,10 @@ def backup2hr_pf():
             i += 1
         if users2groups.get(user, None):
             if len(users2groups[user]):
-                users[user]['groups_id'] = ''
+                users[user]['groups_id:id'] = ''
                 for group in users2groups[user]:
-                    users[user]['groups_id'] += 'hr_pf.' + group + ','
-                users[user]['groups_id'] = users[user]['groups_id'].strip(',')
+                    users[user]['groups_id:id'] += 'docflow.' + group + ','
+                users[user]['groups_id:id'] = users[user]['groups_id:id'].strip(',')
 
     i = 1
     sotrudniki = {}
@@ -251,11 +251,23 @@ def backup2hr_pf():
     # Группы доступа, сначала корневая группа "Планфикс" в .xml
     record = create_record('category_pf', 'ir.module.category', {'name': 'ПланФикс'})
     flectra_data.append(record)
+    groups4csv = {}
     for groups_id2name in groups_id2names:
-        record = create_record(groups_id2name, 'res.groups',{'name': groups_id2names[groups_id2name],
-                                                             'category_id': 'category_pf',
-                                                             'id_from_pf': str(groups_id2name)})
+        groups4csv[groups_id2name] = {'id': str(groups_id2name), 'name': groups_id2names[groups_id2name]}
+        record = create_record(
+            'docflow.' + str(groups_id2name),
+            'res.groups',
+            {
+                'category_id': 'category_pf',
+                'id_from_pf': str(groups_id2name)}
+        )
         flectra_data.append(record)
+    # Полученные группы в .csv
+    with open(os.path.join(DOCFLOW, 'res.groups.csv'), 'w', newline='') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=['id', 'name'])
+        writer.writeheader()
+        for group in groups4csv:
+            writer.writerow(groups4csv[group])
 
     # Юзеры в .csv
     users4csv = {}
@@ -362,8 +374,10 @@ def backup2project():
         }
 
     # Загружаем данные по задачам из файла, полученного из АПИ
-    tasks_from_json = list(tasks_full.values())[84800:]
-    tasks_from_json_ids = tuple(list(tasks_full.keys())[84800:])
+    tasks_from_json = []
+    tasks_from_json_ids = tuple(sorted(list(tasks_full.keys()))[84000:84100])
+    for task in tasks_from_json_ids:
+        tasks_from_json.append(tasks_full[task])
 
     # Названия полей и id загружаем в процессе
     template_fields = {}
@@ -382,8 +396,8 @@ def backup2project():
                 'project_id': dict_key('pr_' + task['statusSet'], processes4flectra),
                 'stage_id': dict_key('st_' + task['status'], statuses4flectra),
                 'create_date': str(task['beginDateTime']).replace('-', '.') + ':00',
-                'user_id': 'users_pf.user_' + chk_users(task['owner']['id']),
-                'employee_id':  'hr_pf.empl_' + chk_users(task['owner']['id']),
+                'user_id': 'docflow.user_' + chk_users(task['owner']['id']),
+                'employee_id':  'pf_data.empl_' + chk_users(task['owner']['id']),
                 'tasktemplate_id': dict_key('tt_' + task['template']['id'], tasktemplates4flectra),
             }
             if task.get('importance', None):
@@ -516,7 +530,7 @@ def backup2project():
         if int(actions[action]['task']['id']) in tasks_from_json_ids:
             actions4flectra['msg_' + str(actions[action]['id'])] = {
                 'date': actions[action]['dateTime'] + ':00',
-                'author_id': 'users_pf.user_' + chk_users(actions[action]['owner']['id']) + '_res_partner',
+                'author_id': 'docflow.user_' + chk_users(actions[action]['owner']['id']) + '_res_partner',
                 'res_id': 'task_' + str(actions[action]['task']['id']),
                 'body': actions[action]['description'],
                 'message_type': 'comment',
@@ -549,7 +563,7 @@ if __name__ == "__main__":
     if RELOAD_ALL_FROM_API:
         reload_all()
 
-    backup2hr_pf()
     backup2project()
+    backup2hr_pf()
 
 
