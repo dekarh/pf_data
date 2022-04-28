@@ -184,10 +184,8 @@ def reload_all():
     global limit_overflow
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
           'Загружаем ранее полученный из АПИ список файлов. Потрачено запросов:', request_count)
-    min_task = 18226506  # До этой задачи (84268 от 30 ноября 2021) задачи без файлов в дальнейшем не будут проверяться
+    min_task = 18191034  # (89731) До этой задачи, задачи без файлов в дальнейшем не будут проверяться
     task_numbers_from_loaded_files = set()
-    task_without_files = []
-    task_without_files_general = []
     files = {}
     with open(os.path.join(PF_BACKUP_DIRECTORY, 'files_full.json'), 'r') as read_file:
         files_loaded = json.load(read_file)
@@ -208,35 +206,42 @@ def reload_all():
     for task in tasks_full_str:
         all_tasks_ids.add(int(task))
         tasks_full[int(task)] = tasks_full_str[task]
+    all_tasks_ids_tuple =  tuple(sorted(all_tasks_ids))
     print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Из сохраненных полных (task.getMulti):', len(tasks_full))
 
-    for task in all_tasks_ids:
-        if task < min_task and task not in task_numbers_from_loaded_files:
+    task_without_files = []
+    tasks4check = []
+    #task_without_files_general = []
+    for task in all_tasks_ids_tuple:
+        if task < min_task: #and task not in task_numbers_from_loaded_files:  # !!!!!!!!!!!!!!!!!! ВРЕМЕННО
             task_without_files.append(task)
             #task_without_files_general.append(int(tasks_full[task]['general']))
+        else:
+            tasks4check.append(task)
     task_without_files = tuple(task_without_files)
     #task_without_files_general = tuple(task_without_files_general)
+    tasks4check = sorted(tasks4check)
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), len(task_without_files),
-          'задач без файлов в дальнейшем не будут проверяться (до задачи 85907 от 20 декабря 2021)')
+          'задач без файлов в дальнейшем не будут проверяться')
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
           'Получаем из АПИ файлы по каждой задаче. Потрачено запросов:', request_count)
     if not limit_overflow:
         if len(argv) == 1:
-            printProgressBar(0, len(tasks_full) + 1, prefix='Скачаны все файлы по:', suffix='задач', length=50)
-        for i, task in enumerate(tasks_full):
-            if task not in task_without_files:
-                addition_text = '<task><id>' + str(task) + '</id></task>' \
-                                + '<returnDownloadLinks>1</returnDownloadLinks>'
-                files_loaded = api_load_from_list('file.getListForTask', 'file', '',
-                                                  api_additionally=addition_text)
-                for file in files_loaded:
-                    if not files.get(file, None):
-                        files[file] = files_loaded[file]
+            printProgressBar(0, len(tasks4check) + 1, prefix='Скачаны все файлы по:', suffix='задач', length=50)
+        for i, task in enumerate(tasks4check):
+            addition_text = '<task><id>' + str(task) + '</id></task>' \
+                            + '<returnDownloadLinks>1</returnDownloadLinks>'
+            files_loaded = api_load_from_list('file.getListForTask', 'file', '',
+                                              api_additionally=addition_text)
+            for file in files_loaded:
+                if not files.get(file, None):
+                    files[file] = files_loaded[file]
             if len(argv) == 1:
-                printProgressBar(i, len(tasks_full) + 1, prefix='Скачаны все файлы по:', suffix='задач', length=50)
+                printProgressBar(i, len(tasks4check) + 1, prefix='Скачаны все файлы по:', suffix='задач', length=50)
             else:
-                print('Задача', i, 'из', len(tasks_full), 'Потрачено запросов:', request_count)
+                print('Задача №', tasks_full[task].get('general', 'б/н'), '[', task, ']  (', i, 'из', len(tasks4check),
+                      ') Потрачено запросов:', request_count)
         print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
               'Сохраняем результирующий список файлов')
         with open(os.path.join(PF_BACKUP_DIRECTORY, 'files_full.json'), 'w') as write_file:
@@ -367,6 +372,8 @@ def reload_all():
                                      api_additionally='<target>all</target>')
     for task in tasks_short:
         all_tasks_ids.add(int(task))
+    all_tasks_ids_tuple =  tuple(sorted(all_tasks_ids))
+
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
           'Догружаем найденные задачи в полный бэкап tasks_full_from_api_backup')
@@ -380,7 +387,7 @@ def reload_all():
         if len(argv) == 1:
             printProgressBar(0, tasks_count + 1, prefix='Скачано полных:', suffix='задач', length=50)
         try:
-            for task in all_tasks_ids:
+            for task in all_tasks_ids_tuple:
                 if not tasks_full.get(task, None):
                     hundred_ids += [int(task)]
                     hundred4xml += ['<id>' + str(task) + '</id>']
@@ -436,12 +443,13 @@ def reload_all():
                         hundred4xml = []
                         hundred_ids = []
                     if len(argv) == 1:
-                        printProgressBar(len(tasks_full), tasks_count + 1, prefix='Скачано полных:', suffix='задач', length=50)
+                        printProgressBar(len(tasks_full), tasks_count + 1, prefix='Скачано полных:', suffix='задач',
+                                         length=50)
                 if os.path.exists(os.path.join(PF_BACKUP_DIRECTORY, 'tasks_full_stop')):
                     raise ValueError
         finally:
-            print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Всего везде:', len(all_tasks_ids), 'Сохранено:', len(tasks_full), 'Не найдено:',
-                  len(not_finded_tasks_ids))
+            print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Всего везде:', len(all_tasks_ids),
+                  'Сохранено:', len(tasks_full), 'Не найдено:', len(not_finded_tasks_ids))
             for task in tasks_full:             # Обновляем во всех задачах информацию из tasks_short_dict
                 if tasks_short.get(task, None):
                     for task_property in tasks_short[task]:

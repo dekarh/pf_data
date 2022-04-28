@@ -18,6 +18,8 @@ PF_DATA = '../data'
 DOCFLOW = '../../docflow/data'
 PF_HEADER = {"Accept": 'application/xml', "Content-Type": 'application/xml'}
 RELOAD_ALL_FROM_API = False
+TASKS_FROM = 84000
+TASKS_TO = 84120
 
 
 def create_record(id, model, sources):
@@ -88,8 +90,19 @@ def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, 
     if iteration == total:
         print()
 
+def chk_users(id):
+    if int(id) in users_ids:
+        return str(id)
+    else:
+        return '5309784'
 
-def backup2hr_pf():
+
+if __name__ == "__main__":
+    # Перезагружаем всё в файлы
+    if RELOAD_ALL_FROM_API:
+        reload_all()
+
+    # backup2hr_pf():
     # Загружаем список групп и пустой список членов для каждой группы
     with open(os.path.join(BACKUP_DIRECTORY, 'usergroups_full.json'), 'r') as read_file:
         groups = json.load(read_file)
@@ -103,43 +116,42 @@ def backup2hr_pf():
     with open(os.path.join(BACKUP_DIRECTORY, 'users_full.json'), 'r') as read_file:
         users_loaded = json.load(read_file)
     users_list = list(users_loaded.values())
-    users_db = {}
-    employees = {}
-    users = {}
+    employees2mails = {}
+    users2mails = {}
     users2groups = {}
-    # Переводим в формат users_db[email], заполняем БД слияния контактов и юзеров employees[e-mail] и users[e-mail]
+    # Переводим в формат users_db[email], заполняем БД слияния контактов и юзеров:
+    #                                                   employees2mails[e-mail] и users2mails[e-mail]
     for user in users_list:
         if user.get('email', None) or user.get('name', '') == 'робот ПланФикса':
             if user.get('name', '') == 'робот ПланФикса':
                 user['email'] = 'robot_pf@finfort.ru'
-            users_db[user['email']] = user
             if user['midName']:
-                employees[user['email']] = {'name': str(user['lastName']) + ' ' + str(user['name']) + ' '
+                employees2mails[user['email']] = {'name': str(user['lastName']) + ' ' + str(user['name']) + ' '
                                                     + str(user['midName'])}
-                users[user['email']] = {'name': str(user['lastName']) + ' ' + str(user['name']) + ' '
+                users2mails[user['email']] = {'name': str(user['lastName']) + ' ' + str(user['name']) + ' '
                                                     + str(user['midName'])}
                 users2groups[user['email']] = set()
             else:
-                employees[user['email']] = {'name': str(user['lastName']) + ' ' + str(user['name'])}
-                users[user['email']] = {'name': str(user['lastName']) + ' ' + str(user['name'])}
+                employees2mails[user['email']] = {'name': str(user['lastName']) + ' ' + str(user['name'])}
+                users2mails[user['email']] = {'name': str(user['lastName']) + ' ' + str(user['name'])}
                 users2groups[user['email']] = set()
-            users[user['email']]['login'] = user['email']
-            employees[user['email']]['work_email'] = user['email']
+            users2mails[user['email']]['login'] = user['email']
+            employees2mails[user['email']]['work_email'] = user['email']
             if user.get('phones', None):
                 if user['phones']:
                     if str(type(user['phones']['phone'])).find('list') > -1:
-                        employees[user['email']]['mobile_phone'] = \
+                        employees2mails[user['email']]['mobile_phone'] = \
                             str(format_phone(user['phones']['phone'][0]['number']))
                     else:
-                        employees[user['email']]['mobile_phone'] = str(format_phone(user['phones']['phone']['number']))
+                        employees2mails[user['email']]['mobile_phone'] = str(format_phone(user['phones']['phone']['number']))
             if user.get('sex', None):
-                employees[user['email']]['gender'] = str(user['sex']).lower()
+                employees2mails[user['email']]['gender'] = str(user['sex']).lower()
             if user.get('id', None):
-                users[user['email']]['id_pf'] = str(user['id'])
+                users2mails[user['email']]['id_pf'] = str(user['id'])
             if user.get('general', None):
-                users[user['email']]['general_user_pf'] = str(user['general'])
+                users2mails[user['email']]['general_user_pf'] = str(user['general'])
             if user.get('active', None):
-                users[user['email']]['active'] = str(user['status'] == 'ACTIVE')
+                users2mails[user['email']]['active'] = str(user['status'] == 'ACTIVE')
             if user.get('userGroups', None):
                 if str(type(user['userGroups']['userGroup'])).find('list') > -1:
                     for group in user['userGroups']['userGroup']:
@@ -155,73 +167,72 @@ def backup2hr_pf():
         contacts_loaded = json.load(read_file)
     contacts_list = list(contacts_loaded.values())
     contacts_db = {}
-    # Переводим в формат users_db[email], заполняем БД сляния контактов и юзеров employees[e-mail]
+    # Переводим в формат users_db[email], заполняем БД сляния контактов и юзеров employees2mails[e-mail]
     for contact in contacts_list:
-        email = ''
+        mail = ''
         for field in contact['customData']['customValue']:
             if field['field']['name'] == 'Корпоративная почта':
-                email = field['text']
-        if email:
-            contacts_db[email] = contact
-            if not employees.get(email, None):
-                employees[email] = {}
-                users[email] = {'login': email}
-                employees[email]['work_email'] = email
-            users[email]['general_contact_pf'] = contact['general']
-            users[email]['userid_pf'] = contact['userid']
+                mail = field['text']
+        if mail:
+            contacts_db[mail] = contact
+            if not employees2mails.get(mail, None):
+                employees2mails[mail] = {}
+                users2mails[mail] = {'login': mail}
+                employees2mails[mail]['work_email'] = mail
+            users2mails[mail]['general_contact_pf'] = contact['general']
+            users2mails[mail]['userid_pf'] = contact['userid']
             for field in contact['customData']['customValue']:
                 if field['field']['name'] == 'ФИО':
-                    if employees[email].get('name', None):
+                    if employees2mails[mail].get('name', None):
                         if len(str(field['text']).strip().split(' ')) > \
-                              len(str(employees[email]['name']).strip().split(' ')):
-                            employees[email]['name'] = field['text']
-                            users[email]['name'] = field['text']
+                              len(str(employees2mails[mail]['name']).strip().split(' ')):
+                            employees2mails[mail]['name'] = field['text']
+                            users2mails[mail]['name'] = field['text']
                     else:
-                        employees[email]['name'] = field['text']
-                        users[email]['name'] = field['text']
+                        employees2mails[mail]['name'] = field['text']
+                        users2mails[mail]['name'] = field['text']
                 #if field['field']['name'] == 'Город':
                 #if field['field']['name'] == 'д/р сотрудника':
                 if field['field']['name'] == 'Статус':
-                    employees[email]['status'] = field['text']
-                    users[email]['active'] = str(field['text'] == 'Активный')
-                    employees[email]['active'] = str(field['text'] == 'Активный')
+                    employees2mails[mail]['status'] = field['text']
+                    users2mails[mail]['active'] = str(field['text'] == 'Активный')
+                    employees2mails[mail]['active'] = str(field['text'] == 'Активный')
                 if field['field']['name'] == 'Подразделение (отдел)' and field['text']:
                     if field['text'] == 'ПродБлок':
                         field['text'] = 'Продуктовый блок'
-                    employees[email]['department_id'] = 'department_' +  str(DEPARTMENTS.index(str(field['text'])))
+                    employees2mails[mail]['department_id'] = 'department_' +  str(DEPARTMENTS.index(str(field['text'])))
         else:
             print(str(contact['id']), str(contact['general']), ' - нет e-mail')
 
     i = 1
-    users4employees = {}
-    for user in users:
-        if users[user].get('id_pf', None):
-            users[user]['id'] = 'user_' + users[user]['id_pf']
-        elif users[user].get('userid_pf', None):
-            users[user]['id'] = 'user_' + users[user]['userid_pf']
+    for mail in users2mails:
+        if users2mails[mail].get('id_pf', None):
+            users2mails[mail]['id'] = 'user_' + users2mails[mail]['id_pf']
+        elif users2mails[mail].get('userid_pf', None):
+            users2mails[mail]['id'] = 'user_' + users2mails[mail]['userid_pf']
         else:
-            users[user]['id'] = 'user_' + str(i)
+            users2mails[mail]['id'] = 'user_' + str(i)
             i += 1
-        if users2groups.get(user, None):
-            if len(users2groups[user]):
-                users[user]['groups_id:id'] = ''
-                for group in users2groups[user]:
-                    users[user]['groups_id:id'] += 'docflow.' + group + ','
-                users[user]['groups_id:id'] = users[user]['groups_id:id'].strip(',')
+        if users2groups.get(mail, None):
+            if len(users2groups[mail]):
+                users2mails[mail]['groups_id:id'] = ''
+                for group in users2groups[mail]:
+                    users2mails[mail]['groups_id:id'] += 'docflow.' + group + ','
+                users2mails[mail]['groups_id:id'] = users2mails[mail]['groups_id:id'].strip(',')
 
     i = 1
-    sotrudniki = {}
-    for employee in employees:
-        if users.get(employee, None):
-            if users[employee].get('id_pf', None):
-                sotrudniki['empl_' + users[employee]['id_pf']] = employees[employee]
-                sotrudniki['empl_' + users[employee]['id_pf']]['id_pf'] = users[employee]['id_pf']
-            elif users[employee].get('userid_pf', None):
-                sotrudniki['empl_' + users[employee]['userid_pf']] = employees[employee]
-                sotrudniki['empl_' + users[employee]['userid_pf']]['id_pf'] = users[employee]['userid_pf']
+    employees4flectra = {}
+    for mail in employees2mails:
+        if users2mails.get(mail, None):
+            if users2mails[mail].get('id_pf', None):
+                employees4flectra['empl_' + users2mails[mail]['id_pf']] = employees2mails[mail]
+                employees4flectra['empl_' + users2mails[mail]['id_pf']]['id_pf'] = users2mails[mail]['id_pf']
+            elif users2mails[mail].get('userid_pf', None):
+                employees4flectra['empl_' + users2mails[mail]['userid_pf']] = employees2mails[mail]
+                employees4flectra['empl_' + users2mails[mail]['userid_pf']]['id_pf'] = users2mails[mail]['userid_pf']
             else:
-                sotrudniki['empl_' + str(i)] = employees[employee]
-                sotrudniki['empl_' + str(i)]['id_pf'] = str(i)
+                employees4flectra['empl_' + str(i)] = employees2mails[mail]
+                employees4flectra['empl_' + str(i)]['id_pf'] = str(i)
                 i += 1
 
     # Заголовок xml
@@ -271,39 +282,39 @@ def backup2hr_pf():
 
     # Юзеры в .csv
     users4csv = {}
-    for user in users:
-        users4csv[user] = {}
-        for field in users[user].keys():
+    for mail in users2mails:
+        users4csv[mail] = {}
+        for field in users2mails[mail].keys():
             if field in ['id', 'name', 'login', 'active']:
-                users4csv[user][field] = users[user][field]
+                users4csv[mail][field] = users2mails[mail][field]
     with open(os.path.join(DOCFLOW, 'res.users.csv'), 'w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=['id', 'name', 'login', 'active'])
         writer.writeheader()
-        for user in users:
-            writer.writerow(users4csv[user])
+        for mail in users2mails:
+            writer.writerow(users4csv[mail])
     users4csv = {}
-    for user in users:
-        users4csv[user] = {}
-        for field in users[user].keys():
+    for mail in users2mails:
+        users4csv[mail] = {}
+        for field in users2mails[mail].keys():
             if field in ['id', 'id_pf', 'general_user_pf', 'general_contact_pf', 'userid_pf', 'groups_id:id']:
                 if field == 'id':
-                    users4csv[user][field] = 'docflow.' + users[user][field]
+                    users4csv[mail][field] = 'docflow.' + users2mails[mail][field]
                 else:
-                    users4csv[user][field] = users[user][field]
+                    users4csv[mail][field] = users2mails[mail][field]
     with open(os.path.join(PF_DATA, 'res.users.csv'), 'w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=['id', 'id_pf', 'general_user_pf', 'general_contact_pf',
                                                      'userid_pf', 'groups_id:id'])
         writer.writeheader()
-        for user in users:
-            writer.writerow(users4csv[user])
+        for mail in users2mails:
+            writer.writerow(users4csv[mail])
 
-    #for i, user in enumerate(users):
-    #    record = create_record(user.replace('.','_'), 'res.users', users[user])
+    #for i, mail in enumerate(users2mails):
+    #    record = create_record(mail.replace('.','_'), 'res.users', users2mails[mail])
     #    flectra_data.append(record)
 
     # Сотрудники в .xml
-    for sotrudnik in sotrudniki:
-        record = create_record(sotrudnik, 'hr.employee', sotrudniki[sotrudnik])
+    for emloyee in employees4flectra:
+        record = create_record(emloyee, 'hr.employee', employees4flectra[emloyee])
         flectra_data.append(record)
 
     # удаляем все lxml аннотации.
@@ -323,30 +334,20 @@ def backup2hr_pf():
     except IOError:
         pass
 
-
-def backup2project():
-    def chk_users(id):
-        if int(id) in users:
-            return str(id)
-        else:
-            return '5309784'
-
-
-    all_tasks_ids = set()
+    #  backup2project()
 
     # Загружаем бэкап задач из выгрузки всех задач (task.getMulti скорректированной task.get) через АПИ ПФ
     tasks_full = {}
     with open(os.path.join(BACKUP_DIRECTORY, 'tasks_full.json'), 'r') as read_file:
         tasks_full_str = json.load(read_file)
     for task in tasks_full_str:
-        all_tasks_ids.add(int(task))
         tasks_full[int(task)] = tasks_full_str[task]
     print('Из сохраненных полных (task.getMulti):', len(tasks_full))
 
     # id загруженных в модуле hr_pf юзеров и сотрудников
     with open(os.path.join(BACKUP_DIRECTORY, 'users_full.json'), 'r') as read_file:
         users_loaded = json.load(read_file)
-    users = tuple([int(x) for x in users_loaded.keys()])
+    users_ids = tuple([int(x) for x in users_loaded.keys()])
 
     # Процессы (project.project)
     with open(os.path.join(BACKUP_DIRECTORY, 'processes_full.json'), 'r') as read_file:
@@ -375,7 +376,7 @@ def backup2project():
 
     # Загружаем данные по задачам из файла, полученного из АПИ
     tasks_from_json = []
-    tasks_from_json_ids = tuple(sorted(list(tasks_full.keys()))[84000:84100])
+    tasks_from_json_ids = tuple(sorted(list(tasks_full.keys()))[TASKS_FROM:TASKS_TO])
     for task in tasks_from_json_ids:
         tasks_from_json.append(tasks_full[task])
 
@@ -558,12 +559,5 @@ def backup2project():
         pass
 
 
-if __name__ == "__main__":
-    # Перезагружаем всё в файлы
-    if RELOAD_ALL_FROM_API:
-        reload_all()
-
-    backup2project()
-    backup2hr_pf()
 
 
