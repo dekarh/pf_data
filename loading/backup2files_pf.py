@@ -10,10 +10,6 @@ from datetime import datetime
 from hide_data import USR_Tocken, PSR_Tocken, PF_ACCOUNT
 from api2backup import api_load_from_list
 
-"""
-curl -H 'Accept: application/xml' -H 'Content-Type: application/xml' -u 4db09df5a62a8a32a9522fcac02d3c6f:06540b851b466ccf84558573aff11b65 -k -d '<request>...</request>' https://api.planfix.ru/xml/
-"""
-
 URL = "https://apiru.planfix.ru/xml"
 PF_HEADER = {"Accept": 'application/xml', "Content-Type": 'application/xml'}
 PF_BACKUP_DIRECTORY = 'current'

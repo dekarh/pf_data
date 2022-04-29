@@ -82,6 +82,8 @@ def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, 
         length      - Optional  : character length of bar (Int)
         fill        - Optional  : bar fill character (Str)
     """
+    if total == 0:
+        total = 1
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
     filledLength = int(length * iteration // total)
     bar = fill * filledLength + '-' * (length - filledLength)
@@ -100,6 +102,8 @@ def chk_users(id):
 if __name__ == "__main__":
     # Перезагружаем всё в файлы
     if RELOAD_ALL_FROM_API:
+        request_count = 0
+        limit_overflow = False
         reload_all()
 
     # backup2hr_pf():

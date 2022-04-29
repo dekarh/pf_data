@@ -170,6 +170,8 @@ def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, 
         length      - Optional  : character length of bar (Int)
         fill        - Optional  : bar fill character (Str)
     """
+    if total == 0:
+        total = 1
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
     filledLength = int(length * iteration // total)
     bar = fill * filledLength + '-' * (length - filledLength)
@@ -184,7 +186,7 @@ def reload_all():
     global limit_overflow
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
           'Загружаем ранее полученный из АПИ список файлов. Потрачено запросов:', request_count)
-    min_task = 18191034  # (89731) До этой задачи, задачи без файлов в дальнейшем не будут проверяться
+    min_task = 18226856  # (86068 от 16.12.2021) До этой задачи, задачи без файлов в дальнейшем не будут проверяться
     task_numbers_from_loaded_files = set()
     files = {}
     with open(os.path.join(PF_BACKUP_DIRECTORY, 'files_full.json'), 'r') as read_file:
@@ -213,7 +215,7 @@ def reload_all():
     tasks4check = []
     #task_without_files_general = []
     for task in all_tasks_ids_tuple:
-        if task < min_task: #and task not in task_numbers_from_loaded_files:  # !!!!!!!!!!!!!!!!!! ВРЕМЕННО
+        if task < min_task and task not in task_numbers_from_loaded_files:
             task_without_files.append(task)
             #task_without_files_general.append(int(tasks_full[task]['general']))
         else:
@@ -259,7 +261,8 @@ def reload_all():
                        api_additionally='<target>template</target>')
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ дерево проектов (переименовал внутри flectra в hr.projectgroup)')
+          'Получаем из АПИ дерево проектов (переименовал внутри flectra в hr.projectgroup). Потрачено запросов:',
+          request_count)
     projectgroups = api_load_from_list('project.getList', 'project', 'projectgroups_full.json')
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
@@ -310,9 +313,12 @@ def reload_all():
             json.dump(handbooks, write_file, ensure_ascii=False)
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ список процессов и список статусов по каждому процессу. Потрачено запросов:', request_count)
+          'Получаем из АПИ список процессов. Потрачено запросов:', request_count)
     processes = api_load_from_list('taskStatus.getSetList', 'taskStatusSet', 'processes_full.json',
                                    pagination=False)
+
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
+          'Получаем из АПИ список статусов по каждому процессу. Потрачено запросов:', request_count)
     statuses = {}
     inactive = set()
     if not limit_overflow:
@@ -363,32 +369,36 @@ def reload_all():
                     + '</fromDate><toDate>' \
                     + datetime.now().strftime('%d-%m-%Y %H:%M') \
                     + '</toDate><sort>asc</sort>'
-    api_load_from_list('action.getListByPeriod', 'action', 'users_full.json',
+    api_load_from_list('action.getListByPeriod', 'action', 'actions_full.json',
                        api_additionally=addition_text, res_dict=actions)
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
           'Получаем из АПИ бэкап задач из выгрузки списка задач (task.getList). Потрачено запросов:', request_count)
-    tasks_short = api_load_from_list('task.getList', 'task', 'tasks_short.json',
-                                     api_additionally='<target>all</target>')
-    for task in tasks_short:
-        all_tasks_ids.add(int(task))
-    all_tasks_ids_tuple =  tuple(sorted(all_tasks_ids))
-
+    if not limit_overflow:
+        tasks_short = api_load_from_list('task.getList', 'task', 'tasks_short.json',
+                                         api_additionally='<target>all</target>')
+        for task in tasks_short:
+            all_tasks_ids.add(int(task))
+        all_tasks_ids_tuple =  tuple(sorted(all_tasks_ids))
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Догружаем найденные задачи в полный бэкап tasks_full_from_api_backup')
+          'Догружаем найденные задачи в полный бэкап tasks_full. Потрачено запросов:', request_count)
     if not limit_overflow:
         not_finded_tasks_ids = set()
+        tasks4check = set()
         deleted_tasks_ids = set()
         hundred4xml = []
         hundred_ids = []
         tasks_count = len(all_tasks_ids)
         tasks_full_checked = {}
+        for task in tasks_full:
+            if not tasks_short.get(task, None):
+                tasks4check.add(task)
         if len(argv) == 1:
             printProgressBar(0, tasks_count + 1, prefix='Скачано полных:', suffix='задач', length=50)
         try:
             for task in all_tasks_ids_tuple:
-                if not tasks_full.get(task, None):
+                if not tasks_full.get(task, None) or task in tasks4check:
                     hundred_ids += [int(task)]
                     hundred4xml += ['<id>' + str(task) + '</id>']
                     if len(hundred_ids) > 99:
@@ -428,14 +438,14 @@ def reload_all():
                                         continue
                                     else:
                                         tasks_loaded = [xmltodict.parse(answer.text)['response']['tasks']['task']]
-                                    for task_loaded in tasks_loaded:
+                                    for ids in hundred_ids:
                                         finded_ids = False
-                                        for ids in hundred_ids:
+                                        for task_loaded in tasks_loaded:
                                             if int(task_loaded['id']) == ids:
                                                 finded_ids = True
                                                 tasks_full[ids] = task_loaded
                                         if not finded_ids:
-                                            not_finded_tasks_ids.add(int(task_loaded['id']))
+                                            not_finded_tasks_ids.add(ids)
                                     break
                             except Exception as e:
                                 i += 1
@@ -448,7 +458,7 @@ def reload_all():
                 if os.path.exists(os.path.join(PF_BACKUP_DIRECTORY, 'tasks_full_stop')):
                     raise ValueError
         finally:
-            print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Всего везде:', len(all_tasks_ids),
+            print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Всего везде:', len(all_tasks_ids),
                   'Сохранено:', len(tasks_full), 'Не найдено:', len(not_finded_tasks_ids))
             for task in tasks_full:             # Обновляем во всех задачах информацию из tasks_short_dict
                 if tasks_short.get(task, None):
@@ -486,13 +496,13 @@ def reload_all():
                         continue
                 if len(argv) == 1:
                     printProgressBar(k, len(not_finded_tasks_ids) + 1, prefix='Скачано:', suffix='задач', length=50)
-                # Удаляем неподтверждённые задачи
-                for task in tasks_full:
-                    if task not in deleted_tasks_ids:
-                        tasks_full_checked[task] = tasks_full[task]
-                print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Удалено:', len(deleted_tasks_ids), 'осталось:', len(tasks_full_checked))
-                with open(os.path.join(PF_BACKUP_DIRECTORY, 'tasks_full.json'), 'w') as write_file:
-                        json.dump(tasks_full_checked, write_file, ensure_ascii=False)
+            # Удаляем неподтверждённые задачи
+            for task in tasks_full:
+                if task not in deleted_tasks_ids:
+                    tasks_full_checked[task] = tasks_full[task]
+            print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Удалено:', len(deleted_tasks_ids), 'осталось:', len(tasks_full_checked))
+            with open(os.path.join(PF_BACKUP_DIRECTORY, 'tasks_full.json'), 'w') as write_file:
+                    json.dump(tasks_full_checked, write_file, ensure_ascii=False)
     print('ВСЕГО потрачено запросов:', request_count)
 
 
