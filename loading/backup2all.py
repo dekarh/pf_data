@@ -106,6 +106,45 @@ if __name__ == "__main__":
         limit_overflow = False
         reload_all()
 
+    # files()
+    # Загружаем список всех файлов
+    files = {}
+    with open(os.path.join(BACKUP_DIRECTORY, 'files_full.json'), 'r') as read_file:
+        files_loaded = json.load(read_file)
+    for file in files_loaded:
+        if files.get(int(files_loaded[file]['uniqueId']),False):
+            if files[int(files_loaded[file]['uniqueId'])]['version'] < files_loaded[file]['version']:
+                files[int(files_loaded[file]['uniqueId'])] = files_loaded[file]
+        else:
+            files[int(files_loaded[file]['uniqueId'])] = files_loaded[file]
+
+    files4flectra = {}
+    location_count = 0
+    for file in files:
+        files4flectra['att_' + str(file)] = {
+            'name': files[file]['name'],
+            'file_id_pf': file,
+        }
+        if files[file]['description']:
+            files4flectra['att_' + str(file)]['description'] = files[file]['description']
+        if files[file]['sourceType'] in ['FILESYSTEM', 'DOCSTEMPLATE']:
+            files4flectra['att_' + str(file)]['file_path_pf'] = files[file].get('full_path','')
+            files4flectra['att_' + str(file)]['type'] = 'binary'
+        elif files[file]['sourceType'] == 'INTERNET':
+            files4flectra['att_' + str(file)]['url'] = files[file]['downloadLink']
+            files4flectra['att_' + str(file)]['type'] = 'url'
+        if files[file].get('project', False):
+            if files[file]['project'].get('id', False):
+                files4flectra['att_' + str(file)]['project_id_external'] = 'pr_' + files[file]['project']['id']
+        if files[file].get('task', False):
+            if files[file]['task'].get('id', False):
+                files4flectra['att_' + str(file)]['task_id_external'] = 'task_' + files[file]['task']['id']
+        if files[file].get('user', False):
+            if files[file]['user'].get('id', False):
+                files4flectra['att_' + str(file)]['create_uid'] = 'user_' + files[file]['user']['id']
+        files4flectra['att_' + str(file)]['file_version_pf'] = files[file]['version']
+
+
     # backup2hr_pf():
     # Загружаем список групп и пустой список членов для каждой группы
     with open(os.path.join(BACKUP_DIRECTORY, 'usergroups_full.json'), 'r') as read_file:
@@ -561,6 +600,7 @@ if __name__ == "__main__":
             xml_writer.write(obj_xml)
     except IOError:
         pass
+
 
 
 
