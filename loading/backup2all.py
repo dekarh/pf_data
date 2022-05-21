@@ -18,8 +18,9 @@ PF_DATA = '../data'
 DOCFLOW = '../../docflow/data'
 PF_HEADER = {"Accept": 'application/xml', "Content-Type": 'application/xml'}
 RELOAD_ALL_FROM_API = False
-TASKS_FROM = 84000
-TASKS_TO = 84120
+HAS_TASK_LIMIT = True
+TASKS_FROM = 83000
+TASKS_TO = 83020
 
 
 def create_record(id, model, sources):
@@ -33,12 +34,18 @@ def create_record(id, model, sources):
             fields.append(objectify.SubElement(record, 'field', name=source, ref=sources[source]))
         elif str(source).endswith('_ids') and str(type(sources[source])).find('list') > -1:
             i += 1
-            attr = "[(6, 0, [ ref('" + "'), ref('".join(sources[source]) + "')])]"
-            fields.append(objectify.SubElement(
-                record,
-                'field',
-                name=source,
-                eval="[(6, 0, [ ref('" + "'), ref('".join(sources[source]) + "')])]"))
+            parts = []
+            for part in sources[source]:
+                if part != '':
+                    parts.append(part)
+            if len(parts):
+                fields.append(objectify.SubElement(
+                    record,
+                    'field',
+                    name=source,
+                    eval="[(6, 0, [ ref('" + "'), ref('".join(parts) + "')])]"))
+            else:
+                continue
         elif source and sources[source]:
             i += 1
             fields.append(objectify.SubElement(record, 'field', name=source))
@@ -55,7 +62,6 @@ def dict_key(key, test_dict):
         return key
     else:
         return ''
-
 
 def check_parent_id(tid, tdict):
     if tid:
@@ -105,45 +111,6 @@ if __name__ == "__main__":
         request_count = 0
         limit_overflow = False
         reload_all()
-
-    # files()
-    # Загружаем список всех файлов
-    files = {}
-    with open(os.path.join(BACKUP_DIRECTORY, 'files_full.json'), 'r') as read_file:
-        files_loaded = json.load(read_file)
-    for file in files_loaded:
-        if files.get(int(files_loaded[file]['uniqueId']),False):
-            if files[int(files_loaded[file]['uniqueId'])]['version'] < files_loaded[file]['version']:
-                files[int(files_loaded[file]['uniqueId'])] = files_loaded[file]
-        else:
-            files[int(files_loaded[file]['uniqueId'])] = files_loaded[file]
-
-    files4flectra = {}
-    location_count = 0
-    for file in files:
-        files4flectra['att_' + str(file)] = {
-            'name': files[file]['name'],
-            'file_id_pf': file,
-        }
-        if files[file]['description']:
-            files4flectra['att_' + str(file)]['description'] = files[file]['description']
-        if files[file]['sourceType'] in ['FILESYSTEM', 'DOCSTEMPLATE']:
-            files4flectra['att_' + str(file)]['file_path_pf'] = files[file].get('full_path','')
-            files4flectra['att_' + str(file)]['type'] = 'binary'
-        elif files[file]['sourceType'] == 'INTERNET':
-            files4flectra['att_' + str(file)]['url'] = files[file]['downloadLink']
-            files4flectra['att_' + str(file)]['type'] = 'url'
-        if files[file].get('project', False):
-            if files[file]['project'].get('id', False):
-                files4flectra['att_' + str(file)]['project_id_external'] = 'pr_' + files[file]['project']['id']
-        if files[file].get('task', False):
-            if files[file]['task'].get('id', False):
-                files4flectra['att_' + str(file)]['task_id_external'] = 'task_' + files[file]['task']['id']
-        if files[file].get('user', False):
-            if files[file]['user'].get('id', False):
-                files4flectra['att_' + str(file)]['create_uid'] = 'user_' + files[file]['user']['id']
-        files4flectra['att_' + str(file)]['file_version_pf'] = files[file]['version']
-
 
     # backup2hr_pf():
     # Загружаем список групп и пустой список членов для каждой группы
@@ -323,7 +290,7 @@ if __name__ == "__main__":
         for group in groups4csv:
             writer.writerow(groups4csv[group])
 
-    # Юзеры в .csv
+    # Юзеры в .csv в два файла-этапа загрузки
     users4csv = {}
     for mail in users2mails:
         users4csv[mail] = {}
@@ -350,10 +317,6 @@ if __name__ == "__main__":
         writer.writeheader()
         for mail in users2mails:
             writer.writerow(users4csv[mail])
-
-    #for i, mail in enumerate(users2mails):
-    #    record = create_record(mail.replace('.','_'), 'res.users', users2mails[mail])
-    #    flectra_data.append(record)
 
     # Сотрудники в .xml
     for emloyee in employees4flectra:
@@ -419,7 +382,10 @@ if __name__ == "__main__":
 
     # Загружаем данные по задачам из файла, полученного из АПИ
     tasks_from_json = []
-    tasks_from_json_ids = tuple(sorted(list(tasks_full.keys()))[TASKS_FROM:TASKS_TO])
+    if HAS_TASK_LIMIT:
+        tasks_from_json_ids = tuple(sorted(list(tasks_full.keys()))[TASKS_FROM:TASKS_TO])
+    else:
+        tasks_from_json_ids = tuple(sorted(list(tasks_full.keys())))
     for task in tasks_from_json_ids:
         tasks_from_json.append(tasks_full[task])
 
@@ -559,7 +525,79 @@ if __name__ == "__main__":
         record = create_record(field_fill, 'docflow.field', fields_fills[field_fill])
         flectra_data.append(record)
 
-    # Комментарии
+    # удаляем все lxml аннотации.
+    objectify.deannotate(flectra_root)
+    etree.cleanup_namespaces(flectra_root)
+
+    # конвертируем все в привычную нам xml структуру.
+    obj_xml = etree.tostring(flectra_root,
+                             pretty_print=True,
+                             xml_declaration=True,
+                             encoding='UTF-8'
+                             )
+
+    try:
+        with open(os.path.join(PF_DATA, 'docflow_data.xml'), "wb") as xml_writer:
+            xml_writer.write(obj_xml)
+    except IOError:
+        pass
+
+    # files() && actions()
+    # Загружаем список всех файлов
+    files = {}
+    with open(os.path.join(BACKUP_DIRECTORY, 'files_full.json'), 'r') as read_file:
+        files_loaded = json.load(read_file)
+    for file in files_loaded:
+        if files.get(int(file),False):  # Если есть такой же файл меньшей версии - замещаем
+            if files[int(file)]['version'] < files_loaded[file]['version']:
+                files[int(file)] = files_loaded[file]
+        else:
+            files[int(file)] = files_loaded[file]
+
+    files4flectra = {}
+    location_count = 0   #
+    for file in files:
+        if HAS_TASK_LIMIT:
+            if int(files[file].get('task', {}).get('id', 0)) not in tasks_from_json_ids:
+                continue
+        if files[file]['sourceType'] in ['FILESYSTEM', 'DOCSTEMPLATE']:
+            if files[file].get('full_path', False):
+                files4flectra['att_' + str(file)] = {
+                    'name': files[file]['name'],
+                    'datas_fname': files[file]['name'],
+                    'file_id_pf': file,
+                    'file_path_pf': files[file]['full_path'],
+                    'type': 'binary'
+                }
+            else:
+                continue
+        elif files[file]['sourceType'] == 'INTERNET':
+            if files[file].get('downloadLink'):
+                files4flectra['att_' + str(file)] = {
+                    'name': files[file]['name'],
+                    'file_id_pf': file,
+                    'url': files[file]['downloadLink'],
+                    'type': 'url'
+                }
+            else:
+                continue
+        else:
+            continue
+        if files[file]['description']:
+            files4flectra['att_' + str(file)]['description'] = files[file]['description']
+        if files[file].get('project', False):
+            if files[file]['project'].get('id', False):
+                if int(files[file]['project']['id']):
+                    files4flectra['att_' + str(file)]['project_id_external'] = 'pr_' + files[file]['project']['id']
+        if files[file].get('task', False):
+            if files[file]['task'].get('id', False):
+                if int(files[file]['task']['id']):
+                    files4flectra['att_' + str(file)]['task_id_external'] = 'task_' + files[file]['task']['id']
+        #if files[file].get('user', False):
+        #    if files[file]['user'].get('id', False):
+        #        files4flectra['att_' + str(file)]['create_uid'] = 'docflow.user_' + chk_users(files[file]['user']['id'])
+        files4flectra['att_' + str(file)]['file_version_pf'] = files[file]['version']
+
     # Загружаем бэкап комментариев
     actions4flectra = {}
     actions = {}
@@ -580,9 +618,31 @@ if __name__ == "__main__":
                 'message_type': 'comment',
                 'model': 'project.task'
             }
+            if len(actions[action].get('files', {}).get('file',[])):
+                if str(type(actions[action]['files']['file'])).replace("'","") == '<class dict>':
+                    actions4flectra['msg_' + str(actions[action]['id'])]['attachment_ids'] = \
+                        [dict_key('att_' + actions[action]['files']['file']['id'], files4flectra)]
+                else:
+                    actions4flectra['msg_' + str(actions[action]['id'])]['attachment_ids'] = [
+                        dict_key('att_' + actions[action]['files']['file'][x]['id'], files4flectra)
+                        for x in range(len(actions[action]['files']['file']))
+                    ]
+
+    # Заголовок xml
+    flectra_root = objectify.Element('flectra')
+    flectra_data = objectify.SubElement(flectra_root, 'data')
+
+    # Комментарии
     for action in actions4flectra:
         record = create_record(action, 'mail.message', actions4flectra[action])
         flectra_data.append(record)
+
+    off = """
+    # Файлы (ir.attachment)
+    for file in files4flectra:
+        record = create_record(file, 'ir.attachment', files4flectra[file])
+        flectra_data.append(record)
+    """
 
     # удаляем все lxml аннотации.
     objectify.deannotate(flectra_root)
@@ -596,12 +656,19 @@ if __name__ == "__main__":
                              )
 
     try:
-        with open(os.path.join(PF_DATA, 'docflow_data.xml'), "wb") as xml_writer:
+        with open(os.path.join(PF_DATA, 'actions_data.xml'), "wb") as xml_writer:
             xml_writer.write(obj_xml)
     except IOError:
         pass
 
 
-
+    with open(os.path.join(PF_DATA, 'ir.attachment.csv'), 'w', newline='') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=[ 'id', 'name', 'file_id_pf', 'file_path_pf', 'type', 'url',
+                                                      'description', 'project_id_external', 'task_id_external',
+                                                      'datas_fname', 'file_version_pf'])
+        writer.writeheader()
+        for file in files4flectra:
+            files4flectra[file].update({'id': file})
+            writer.writerow(files4flectra[file])
 
 

@@ -30,6 +30,8 @@
         'data/hr_pf_data.xml',
         'data/docflow_data.xml',
         'data/res.users.csv',
+        'data/ir.attachment.csv',
+        'data/actions_data.xml',
     ],
     # only loaded in demonstration mode
     'demo': [

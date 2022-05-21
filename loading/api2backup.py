@@ -19,6 +19,7 @@ RELOAD_ALL_FROM_API = True
 NOT_CHECKED_TASK = 18138396 # 18095594 # (24466 17.08.2020) До этой задачи, файлы не будут проверяться
 MIN_TASK = 18243254  # (93777 от 02.02.2022) До этой задачи, задачи без файлов в дальнейшем не будут проверяться
 DIR4FILES = '/opt/PF_backup/files'
+DIR4JSONS = '/opt/PF_backup/data'
 MAX_REPIT = 10
 DOWNLOAD_FILES = True
 
@@ -160,7 +161,7 @@ def api_load_from_list(api_method, obj_name, file_name, api_additionally='',
                     list(map(lambda x:'part-' if x else '', [limit_overflow]))[0] + file_name
             ), 'w') as write_file:
                 json.dump(res_dict, write_file, ensure_ascii=False)
-                print(boost, datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
+                print(boost, datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
                       list(map(lambda x: 'ЧАСТИЧНО' if x else '',[limit_overflow]))[0], 'Сохранено ', len(res_dict),
                       'объектов', obj_name, 'запрошенных методом', api_method)
     return res_dict
@@ -195,9 +196,8 @@ def reload_all():
     global files
 
     # =============== ЗАДАЧИ ==========================
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Загружаем бэкап задач (task.getMulti скорректированной task.get) через АПИ ПФ. Потрачено запросов:',
-          request_count)
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
+          'Загружаем бэкап задач (task.getMulti скорректированной task.get) через АПИ ПФ')
     tasks_full = {}
     tasks_short = {}
     all_tasks_ids = set()
@@ -207,10 +207,11 @@ def reload_all():
         all_tasks_ids.add(int(task))
         tasks_full[int(task)] = tasks_full_str[task]
     all_tasks_ids_tuple =  tuple(sorted(all_tasks_ids))
-    print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Из сохраненных полных (task.getMulti):', len(tasks_full))
+    print('\n',datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
+          'Из сохраненных полных (task.getMulti):', len(tasks_full), 'Всего везде:', len(all_tasks_ids_tuple))
 
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ задачи из task.getList. Потрачено запросов:', request_count)
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
+          'Получаем из АПИ задачи из task.getList')
     if not limit_overflow:
         tasks_short = api_load_from_list('task.getList', 'task', 'tasks_short.json',
                                          api_additionally='<target>all</target>')
@@ -218,8 +219,8 @@ def reload_all():
             all_tasks_ids.add(int(task))
         all_tasks_ids_tuple =  tuple(sorted(all_tasks_ids))
 
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Догружаем найденные задачи в полный бэкап tasks_full. Потрачено запросов:', request_count)
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
+          'Догружаем найденные задачи в полный бэкап tasks_full. Всего везде:', len(all_tasks_ids_tuple))
     if not limit_overflow:
         not_finded_tasks_ids = set()
         tasks4check = set()
@@ -230,7 +231,9 @@ def reload_all():
         tasks_full_checked = {}
         for task in tasks_full:
             if not tasks_short.get(task, None):
-                tasks4check.add(task)
+                if tasks_full[task]['type'] == 'task':
+                    tasks4check.add(task)
+        tasks4check = tuple(sorted(list(tasks4check)))
         if len(argv) == 1:
             printProgressBar(0, tasks_count + 1, prefix='Скачано полных:', suffix='задач', length=50)
         try:
@@ -295,8 +298,8 @@ def reload_all():
                 if os.path.exists(os.path.join(PF_BACKUP_DIRECTORY, 'tasks_full_stop')):
                     raise ValueError
         finally:
-            print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Всего везде:', len(all_tasks_ids),
-                  'Сохранено:', len(tasks_full), 'Не найдено:', len(not_finded_tasks_ids))
+            print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|', 'Всего везде:',
+                  len(all_tasks_ids_tuple), 'Сохранено:', len(tasks_full), 'Не найдено:', len(not_finded_tasks_ids))
             for task in tasks_full:             # Обновляем во всех задачах информацию из tasks_short_dict
                 if tasks_short.get(task, None):
                     for task_property in tasks_short[task]:
@@ -318,11 +321,13 @@ def reload_all():
                         if not answer.ok:
                             i += 1
                             continue
-                        elif xmltodict.parse(answer.text)['response']['@status'] == 'error' and xmltodict.parse(answer.text)['response']['code'] == '3001':
+                        elif xmltodict.parse(answer.text)['response']['@status'] == 'error' \
+                                and xmltodict.parse(answer.text)['response']['code'] == '3001':
                             deleted_tasks_ids.add(task)
                             break
                         else:
-                            if str(type(xmltodict.parse(answer.text)['response']['task'])).replace("'", '') == '<class NoneType>':
+                            if str(type(xmltodict.parse(answer.text)['response']['task'])).replace("'", '') \
+                                    == '<class NoneType>':
                                 i += 1
                                 continue
                             else:
@@ -337,7 +342,8 @@ def reload_all():
             for task in tasks_full:
                 if task not in deleted_tasks_ids:
                     tasks_full_checked[task] = tasks_full[task]
-            print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Удалено:', len(deleted_tasks_ids), 'осталось:', len(tasks_full_checked))
+            print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|', 'Удалено:',
+                  len(deleted_tasks_ids), 'осталось:', len(tasks_full_checked))
             with open(os.path.join(PF_BACKUP_DIRECTORY, 'tasks_full.json'), 'w') as write_file:
                     json.dump(tasks_full_checked, write_file, ensure_ascii=False)
 
@@ -347,8 +353,8 @@ def reload_all():
     all_tasks_ids_tuple = tuple(sorted(all_tasks_ids))
 
     # =============== ФАЙЛЫ + ПРОЕКТЫ + КОНТАКТЫ ==========================
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Загружаем ранее полученный из АПИ список файлов. Потрачено запросов:', request_count)
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
+          'Загружаем ранее полученный из АПИ список файлов')
     task_numbers_from_loaded_files = set()
     with open(os.path.join(PF_BACKUP_DIRECTORY, 'files_full.json'), 'r') as read_file:
         files_loaded = json.load(read_file)
@@ -373,11 +379,11 @@ def reload_all():
     task_without_files = tuple(task_without_files)
     #task_without_files_general = tuple(task_without_files_general)
     tasks4check = sorted(tasks4check)
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Из', len(tasks_full), 'задач', len(tasks4check),
-          'будут, а', len(task_without_files), 'не будут проверяться')
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|', 'Из', len(tasks_full), 'задач',
+          len(tasks4check), 'будут, а', len(task_without_files), 'не будут проверяться')
 
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ файлы по каждой задаче. Потрачено запросов:', request_count)
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
+          'Получаем из АПИ файлы по каждой задаче')
     if not limit_overflow:
         if len(argv) == 1:
             printProgressBar(0, len(tasks4check) + 1, prefix='Скачаны все файлы по:', suffix='задач', length=50)
@@ -392,16 +398,15 @@ def reload_all():
             if len(argv) == 1:
                 printProgressBar(i, len(tasks4check) + 1, prefix='Скачаны все файлы по:', suffix='задач', length=50)
             else:
-                print('Задача №', tasks_full[task].get('general', 'б/н'), '[', task, ']  (', i, 'из', len(tasks4check),
-                      ') Потрачено запросов:', request_count)
+                print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Задача №', tasks_full[task].get('general', 'б/н'),
+                      '[', task, ']  (', i, 'из', len(tasks4check), ')')
 
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ дерево проектов (переименовал внутри flectra в hr.projectgroup). Потрачено запросов:',
-          request_count)
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
+          'Получаем из АПИ дерево проектов (переименовал внутри flectra в hr.projectgroup)')
     projectgroups = api_load_from_list('project.getList', 'project', 'projectgroups_full.json')
 
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ список файлов по каждому проекту. Потрачено запросов:', request_count)
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
+          'Получаем из АПИ список файлов по каждому проекту')
     if not limit_overflow:
         if len(argv) == 1:
             printProgressBar(0, len(projectgroups) + 1, prefix='Скачаны все файлы по:', suffix='проектов',
@@ -417,12 +422,12 @@ def reload_all():
                 printProgressBar(i, len(projectgroups) + 1, prefix='Скачаны все файлы по:', suffix='проектов',
                                  length=50)
 
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ контакты. Потрачено запросов:', request_count)
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
+          'Получаем из АПИ контакты')
     contacts = api_load_from_list('contact.getList', 'contact', 'contacts_full.json')
 
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ список файлов по каждому контакту. Потрачено запросов:', request_count)
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
+          'Получаем из АПИ список файлов по каждому контакту')
     if not limit_overflow:
         if len(argv) == 1:
             printProgressBar(0, len(contacts) + 1, prefix='Скачаны все файлы по:', suffix='контактов', length=50)
@@ -438,23 +443,24 @@ def reload_all():
                 printProgressBar(i, len(contacts) + 1, prefix='Скачаны все файлы по:', suffix='контактов',
                                  length=50)
 
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
           'Сохраняем результирующий список файлов')
     if not limit_overflow:
         with open(os.path.join(PF_BACKUP_DIRECTORY, 'files_full.json'), 'w') as write_file:
             json.dump(files, write_file, ensure_ascii=False)
 
     # =============== КОММЕНТАРИИ  ==========================
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
           'Загружаем бэкап комментариев')
     actions = {}
     with open(os.path.join(PF_BACKUP_DIRECTORY, 'actions_full.json'), 'r') as read_file:
         actions_str = json.load(read_file)
     for action in actions_str:
         actions[int(action)] = actions_str[action]
-    print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Из сохраненных комментариев:', len(actions))
+    print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|', 'Из сохраненных комментариев:',
+          len(actions))
 
-    print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), 'Догружаем комментарии. Потрачено запросов:', request_count)
+    print(datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|', 'Догружаем комментарии')
     addition_text = '<fromDate>' \
                     + (datetime.strptime(actions[max(actions.keys())]['dateTime'], '%d-%m-%Y %H:%M') -
                        timedelta(minutes=1)).strftime('%d-%m-%Y %H:%M') \
@@ -465,9 +471,8 @@ def reload_all():
                        api_additionally=addition_text, res_dict=actions)
 
     # =============== ВСЁ ОСТАЛЬНОЕ ==========================
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ юзеров, сотрудников, контакты, группы доступа и шаблоны задач. Потрачено запросов:',
-          request_count)
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
+          'Получаем из АПИ юзеров, сотрудников, контакты, группы доступа и шаблоны задач')
     api_load_from_list('user.getList', 'user', 'users_full.json')
     api_load_from_list('contact.getList', 'contact', 'contacts_finfort.json' ,
                        api_additionally='<target>6532326</target>')
@@ -475,8 +480,8 @@ def reload_all():
     api_load_from_list('task.getList', 'task', 'tasktemplates_full.json',
                        api_additionally='<target>template</target>')
 
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ список справочников. Потрачено запросов:', request_count)
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
+          'Получаем из АПИ список справочников')
     handbooks = api_load_from_list('handbook.getList', 'handbook', '', pagination=False)
     if not limit_overflow:
         if len(argv) == 1:
@@ -487,17 +492,18 @@ def reload_all():
                                          api_additionally=addition_text, with_totalcount=False, key_name='key')
             handbooks[handbook]['records'] = records
             if len(argv) == 1:
-                printProgressBar(i, len(handbooks) + 1, prefix='Скачаны все записи по:', suffix='справочников', length=50)
+                printProgressBar(i, len(handbooks) + 1, prefix='Скачаны все записи по:', suffix='справочников',
+                                 length=50)
         with open(os.path.join(PF_BACKUP_DIRECTORY, 'handbooks_full.json'), 'w') as write_file:
             json.dump(handbooks, write_file, ensure_ascii=False)
 
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ список процессов. Потрачено запросов:', request_count)
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
+          'Получаем из АПИ список процессов')
     processes = api_load_from_list('taskStatus.getSetList', 'taskStatusSet', 'processes_full.json',
                                    pagination=False)
 
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'),
-          'Получаем из АПИ список статусов по каждому процессу. Потрачено запросов:', request_count)
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
+          'Получаем из АПИ список статусов по каждому процессу')
     statuses = {}
     inactive = set()
     if not limit_overflow:
@@ -615,170 +621,183 @@ if __name__ == "__main__":
     limit_overflow = False
     files = {}
     reload_all()
-    if not limit_overflow:
-        for file in files:
-            files[file]['full_path'] = ''  # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    if os.path.exists(DIR4FILES):
+        if not limit_overflow:
+            # Копируем скачанные из АПИ JSON
+            data_directory = os.path.join(DIR4JSONS, datetime.now().strftime("%Y-%m-%d"))
+            os.mkdir(data_directory)
+            for file in os.listdir(PF_BACKUP_DIRECTORY):
+                shutil.copy(file, data_directory)
 
-        # Загружаем дерево проектов из сохраненного файла, добавляем безопасные для файловой системы названия проектов
-        projects = {}
-        with open(os.path.join(PF_BACKUP_DIRECTORY, 'projectgroups_full.json'), 'r') as read_file:
-            projects_loaded = json.load(read_file)
-        for project in projects_loaded:
-            projects[int(project)] = projects_loaded[project]
-            projects[int(project)]['title_recycled'] = \
-                projects[int(project)]['title'].replace(':', '-').replace('\\', '-').replace('/', '-')
+            # Обнуляем пути к файлу на диске
+            for file in files:
+                files[file]['full_path'] = ''  # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-        tasks_full = {}
-        with open(os.path.join(PF_BACKUP_DIRECTORY, 'tasks_full.json'), 'r') as read_file:
-            tasks_full_loaded = json.load(read_file)
-        for task in tasks_full_loaded:
-            tasks_full[int(task)] = tasks_full_loaded[task]
+            # Загружаем дерево проектов из сохраненного файла, добавляем безопасные для файловой системы названия проектов
+            projects = {}
+            with open(os.path.join(PF_BACKUP_DIRECTORY, 'projectgroups_full.json'), 'r') as read_file:
+                projects_loaded = json.load(read_file)
+            for project in projects_loaded:
+                projects[int(project)] = projects_loaded[project]
+                projects[int(project)]['title_recycled'] = \
+                    projects[int(project)]['title'].replace(':', '-').replace('\\', '-').replace('/', '-')
 
-        projects_in_levels = {0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], }
-        for project in projects:
-            # Вычисляем уровень вложенности текущего проекта (количество уровней надпроектов)
-            down_recursion = True
-            project_ids = []
-            current_id = projects[project]['id']
-            while down_recursion:
-                parent_id = check_parent_id(current_id, projects)
-                if parent_id:
-                    project_ids.append(parent_id)
-                    current_id = parent_id
-                else:
-                    down_recursion = False
-            projects[project]['level'] = len(project_ids)
-            projects[project]['parents'] = project_ids
-            projects_in_levels[len(project_ids)] += [project]
+            tasks_full = {}
+            with open(os.path.join(PF_BACKUP_DIRECTORY, 'tasks_full.json'), 'r') as read_file:
+                tasks_full_loaded = json.load(read_file)
+            for task in tasks_full_loaded:
+                tasks_full[int(task)] = tasks_full_loaded[task]
 
-        # Создаем дерево директорий
+            projects_in_levels = {0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], }
+            for project in projects:
+                # Вычисляем уровень вложенности текущего проекта (количество уровней надпроектов)
+                down_recursion = True
+                project_ids = []
+                current_id = projects[project]['id']
+                while down_recursion:
+                    parent_id = check_parent_id(current_id, projects)
+                    if parent_id:
+                        project_ids.append(parent_id)
+                        current_id = parent_id
+                    else:
+                        down_recursion = False
+                projects[project]['level'] = len(project_ids)
+                projects[project]['parents'] = project_ids
+                projects_in_levels[len(project_ids)] += [project]
 
-        for i, project_in_level in enumerate(projects_in_levels):
-            for project in projects_in_levels[project_in_level]:
-                full_path = DIR4FILES
-                if len(projects[project]['parents']) > 1:
-                    projects_parents = reversed(projects[project]['parents'])
-                else:
-                    projects_parents = projects[project]['parents']
-                for parent_project in projects_parents:
-                    full_path = os.path.join(full_path, projects[parent_project]['title_recycled'])
-                full_path = os.path.join(full_path, projects[project]['title_recycled'])
-                projects[project]['full_path'] = full_path
-                if DOWNLOAD_FILES:
-                    if not os.path.exists(full_path):
-                        os.mkdir(full_path)
-        if DOWNLOAD_FILES:
-            if not os.path.exists(os.path.join(DIR4FILES, '_Без_проекта')):
-                os.mkdir(os.path.join(DIR4FILES, '_Без_проекта'))
+            # Создаем дерево директорий
 
-        downloaded_files_ids = []
-        errors = {}
-        try:
-            # qq = """
-            for i in range(len(projects_in_levels) - 1, -1, -1):
-                print('\n', datetime.now().strftime("%H:%M:%S"),
-                      '  ======================= УРОВЕНЬ', i, '===========================\n')
-                for j, project in enumerate(projects_in_levels[i]):
-                    print(datetime.now().strftime("%H:%M:%S"), 'УРОВЕНЬ', i, '|Проект', j + 1, 'из',
-                          len(projects_in_levels[i]))
-                    project_files = []
-                    for file in files:
-                        if files[file].get('project', None):
-                            if files[file]['project'].get('id', None):
-                                if int(files[file]['project']['id']) == project:
-                                    project_files.append(files[file])
-                    rez_str = ''
-                    for file in project_files:
-                        answer = ''
-                        if file.get('task', None):
-                            if file['task'].get('id', None):
-                                if tasks_full.get(int(file['task']['id']), None):
-                                    write_path = os.path.join(
-                                        projects[project]['full_path'],
-                                        str(tasks_full[int(file['task']['id'])]['general']))
+            for i, project_in_level in enumerate(projects_in_levels):
+                for project in projects_in_levels[project_in_level]:
+                    full_path = DIR4FILES
+                    if len(projects[project]['parents']) > 1:
+                        projects_parents = reversed(projects[project]['parents'])
+                    else:
+                        projects_parents = projects[project]['parents']
+                    for parent_project in projects_parents:
+                        full_path = os.path.join(full_path, projects[parent_project]['title_recycled'])
+                    full_path = os.path.join(full_path, projects[project]['title_recycled'])
+                    projects[project]['full_path'] = full_path
+                    if DOWNLOAD_FILES:
+                        if not os.path.exists(full_path):
+                            os.mkdir(full_path)
+            if DOWNLOAD_FILES:
+                if not os.path.exists(os.path.join(DIR4FILES, '_Без_проекта')):
+                    os.mkdir(os.path.join(DIR4FILES, '_Без_проекта'))
+
+            downloaded_files_ids = []
+            errors = {}
+            try:
+                # qq = """
+                for i in range(len(projects_in_levels) - 1, -1, -1):
+                    print('\n', datetime.now().strftime("%H:%M:%S"),
+                          '  ======================= УРОВЕНЬ', i, '===========================\n')
+                    for j, project in enumerate(projects_in_levels[i]):
+                        print(datetime.now().strftime("%H:%M:%S"), 'УРОВЕНЬ', i, '|Проект', j + 1, 'из',
+                              len(projects_in_levels[i]))
+                        project_files = []
+                        for file in files:
+                            if files[file].get('project', None):
+                                if files[file]['project'].get('id', None):
+                                    if int(files[file]['project']['id']) == project:
+                                        project_files.append(files[file])
+                        rez_str = ''
+                        for file in project_files:
+                            answer = ''
+                            if file.get('task', None):
+                                if file['task'].get('id', None):
+                                    if tasks_full.get(int(file['task']['id']), None):
+                                        write_path = os.path.join(
+                                            projects[project]['full_path'],
+                                            str(tasks_full[int(file['task']['id'])]['general']))
+                                    else:
+                                        write_path = projects[project]['full_path']
                                 else:
                                     write_path = projects[project]['full_path']
                             else:
                                 write_path = projects[project]['full_path']
+                            if DOWNLOAD_FILES:
+                                if not os.path.exists(write_path):
+                                    os.mkdir(write_path)
+                            rez_str = str(os.path.join(write_path, file['name'].replace('~&gt;', '').replace('&', '').\
+                                                       replace(';', '').replace(':', '').replace('~', '').replace('/', '').\
+                                                       replace('\\', '')))
+                            if len(rez_str) > 230:
+                                rez_str = rez_str[:224] + '.' + rez_str.split('.')[-1]
+                            if DOWNLOAD_FILES:
+                                rez_str, downloaded_files_ids = download_file(rez_str, downloaded_files_ids)
+                            files[int(file['id'])]['full_path'] = rez_str
+                # """
+                print('\n', datetime.now().strftime("%H:%M:%S"),
+                      '  ======================= БЕЗ ПРОЕКТА ===========================\n')
+                without_project = set()
+                j = 0
+                for file in files.values():
+                    if not file.get('full_path', ''):
+                        if tasks_full.get(int(file['task']['id'])):
+                            rez_str = os.path.join(DIR4FILES, '_Без_проекта',
+                                                   str(tasks_full[int(file['task']['id'])]['general']))
                         else:
-                            write_path = projects[project]['full_path']
-                        if DOWNLOAD_FILES:
-                            if not os.path.exists(write_path):
-                                os.mkdir(write_path)
-                        rez_str = str(os.path.join(write_path, file['name'].replace('~&gt;', '').replace('&', ''). \
-                                                   replace(';', '').replace(':', '').replace('~', '').replace('/', ''). \
-                                                   replace('\\', '')))
+                            rez_str = os.path.join(DIR4FILES, '_Без_проекта', file['task']['id'])
+                        if not os.path.exists(rez_str):
+                            os.mkdir(rez_str)
+                        rez_str = os.path.join(rez_str, file['name'].replace('~&gt;', '').replace('&', '').replace(';', '')
+                                               .replace(':', '').replace('~', '').replace('/', '').replace('\\', ''))
                         if len(rez_str) > 230:
                             rez_str = rez_str[:224] + '.' + rez_str.split('.')[-1]
+                        if tasks_full.get(int(file['task']['id'])):
+                            without_project.add(str(tasks_full[int(file['task']['id'])]['general']))
                         if DOWNLOAD_FILES:
                             rez_str, downloaded_files_ids = download_file(rez_str, downloaded_files_ids)
                         files[int(file['id'])]['full_path'] = rez_str
-            # """
-            print('\n', datetime.now().strftime("%H:%M:%S"),
-                  '  ======================= БЕЗ ПРОЕКТА ===========================\n')
-            without_project = set()
-            j = 0
-            for file in files.values():
-                if not file.get('full_path', ''):
-                    if tasks_full.get(int(file['task']['id'])):
-                        rez_str = os.path.join(DIR4FILES, '_Без_проекта',
-                                               str(tasks_full[int(file['task']['id'])]['general']))
-                    else:
-                        rez_str = os.path.join(DIR4FILES, '_Без_проекта', file['task']['id'])
-                    if not os.path.exists(rez_str):
-                        os.mkdir(rez_str)
-                    rez_str = os.path.join(rez_str, file['name'].replace('~&gt;', '').replace('&', '').replace(';', '')
-                                           .replace(':', '').replace('~', '').replace('/', '').replace('\\', ''))
-                    if len(rez_str) > 230:
-                        rez_str = rez_str[:224] + '.' + rez_str.split('.')[-1]
-                    if tasks_full.get(int(file['task']['id'])):
-                        without_project.add(str(tasks_full[int(file['task']['id'])]['general']))
-                    if DOWNLOAD_FILES:
-                        rez_str, downloaded_files_ids = download_file(rez_str, downloaded_files_ids)
-                    files[int(file['id'])]['full_path'] = rez_str
-            print(list(without_project).sort())
-        except Exception as e:
-            print('ОШИБКА!!!', e)
-        finally:
-            pass
-            with open(os.path.join(PF_BACKUP_DIRECTORY, 'files_full.json'), 'w') as write_file:
-                json.dump(files, write_file, ensure_ascii=False)
+                print(list(without_project).sort())
+            except Exception as e:
+                print('ОШИБКА!!!', e)
+            finally:
+                pass
+                with open(os.path.join(PF_BACKUP_DIRECTORY, 'files_full.json'), 'w') as write_file:
+                    json.dump(files, write_file, ensure_ascii=False)
 
-        # Сохраняем список загруженных на диск файлов
-        files_from_disk = []
-        for root, dirs, dir_files in os.walk(DIR4FILES):
-            for file in dir_files:
-                files_from_disk.append(os.path.join(root, file))
-        with open(os.path.join(PF_BACKUP_DIRECTORY, 'files_from_disk.json'), 'w') as write_file:
-            json.dump(files_from_disk, write_file, ensure_ascii=False)
-        files_from_disk = tuple(sorted(files_from_disk))
+            # Сохраняем список загруженных на диск файлов
+            files_from_disk = []
+            for root, dirs, dir_files in os.walk(DIR4FILES):
+                for file in dir_files:
+                    files_from_disk.append(os.path.join(root, file))
+            with open(os.path.join(PF_BACKUP_DIRECTORY, 'files_from_disk.json'), 'w') as write_file:
+                json.dump(files_from_disk, write_file, ensure_ascii=False)
+            files_from_disk = tuple(sorted(files_from_disk))
 
-        # Список файлов из АПИ ПФ
-        files_from_api = []
-        for file in files:
-            files_from_api.append(files[file]['full_path'])
-        files_from_api = tuple(sorted(files_from_api))
+            # Список файлов из АПИ ПФ
+            files_from_api = []
+            for file in files:
+                files_from_api.append(files[file]['full_path'])
+            files_from_api = tuple(sorted(files_from_api))
 
-        if len(argv) == 1:
-            printProgressBar(0, len(files_from_disk), prefix='Проверено:', suffix='на удаление', length=50)
-        files4delete = []
-        for i, file in enumerate(files_from_disk):
             if len(argv) == 1:
-                printProgressBar(i, len(files_from_disk), prefix='Проверено:', suffix='на удаление', length=50)
-            if file not in files_from_api:
-                if not os.path.exists(os.path.dirname(file.replace('/files/', '/deleted/'))):
-                    os.makedirs(os.path.dirname(file.replace('/files/', '/deleted/')), exist_ok=False)
-                shutil.move(file, file.replace('/files/', '/deleted/'))
+                printProgressBar(0, len(files_from_disk), prefix='Проверено:', suffix='на удаление', length=50)
+            files4delete = []
+            for i, file in enumerate(files_from_disk):
+                if len(argv) == 1:
+                    printProgressBar(i, len(files_from_disk), prefix='Проверено:', suffix='на удаление', length=50)
+                if file not in files_from_api:
+                    if not os.path.exists(os.path.dirname(file.replace('/files/', '/deleted/'))):
+                        os.makedirs(os.path.dirname(file.replace('/files/', '/deleted/')), exist_ok=False)
+                    shutil.move(file, file.replace('/files/', '/deleted/'))
 
-        # Обновляем список загруженных на диск файлов
-        files_from_disk = []
-        for root, dirs, dir_files in os.walk(DIR4FILES):
-            for file in dir_files:
-                files_from_disk.append(os.path.join(root, file))
-        with open(os.path.join(PF_BACKUP_DIRECTORY, 'files_from_disk.json'), 'w') as write_file:
-            json.dump(files_from_disk, write_file, ensure_ascii=False)
-        files_from_disk = tuple(sorted(files_from_disk))
-
+            # Обновляем список загруженных на диск файлов
+            files_from_disk = []
+            for root, dirs, dir_files in os.walk(DIR4FILES):
+                for file in dir_files:
+                    files_from_disk.append(os.path.join(root, file))
+            with open(os.path.join(PF_BACKUP_DIRECTORY, 'files_from_disk.json'), 'w') as write_file:
+                json.dump(files_from_disk, write_file, ensure_ascii=False)
+            files_from_disk = tuple(sorted(files_from_disk))
+        else:
+            print('\n', datetime.now().strftime("%H:%M:%S"), 'Неполное обновление - обновление файлов ПРОПУЩЕНО')
+    else:
+        print('\n', datetime.now().strftime("%H:%M:%S"), 'Не смонтирован диск с файлами - обновление файлов ПРОПУЩЕНО')
+    print('\n', datetime.now().strftime("%H:%M:%S"),
+          '============================ РАБОТА СКРИПТА ОКОНЧЕНА ============================', '\n\n')
 
 
 
