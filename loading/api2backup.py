@@ -130,8 +130,8 @@ def api_load_from_list(api_method, obj_name, file_name, api_additionally='',
                             print('\n       ', ' '.join(objs_str))
                             """
                         else:
-                            debug2 = """
                             objs_loaded = [xmltodict.parse(answer.text)['response'][obj_names][obj_name]]
+                            debug2 = """
                             print('\n       ', objs_loaded[0].get('id', 'нет'))
                             """
                             obj_count += 1
@@ -194,6 +194,137 @@ def reload_all():
     global request_count
     global limit_overflow
     global files
+
+    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
+          'Получаем из АПИ список справочников')
+    handbooks = {}
+    handbooks_loaded = api_load_from_list('handbook.getList', 'handbook', '', pagination=False)
+    handbooks_with_category = set()
+    if not limit_overflow:
+        if len(argv) == 1:
+            printProgressBar(0, len(handbooks_loaded) + 1, prefix='Скачаны все записи по:', suffix='справочников',
+                             length=50)
+        for i, handbook in enumerate(handbooks_loaded):
+            records1lvl = api_load_from_list(
+                'handbook.getRecords',
+                'record',
+                '',
+                api_additionally='<handbook><id>' + str(handbook) + '</id></handbook>',
+                with_totalcount=False,
+                key_name='key')
+            handbooks[handbook] = {}
+            records2lvl = {}
+            records3lvl = {}
+            
+            for record in records1lvl:
+                if records1lvl[record]['isGroup'] == '1':
+                    handbooks_with_category.add(handbook)
+                    records_loaded = api_load_from_list(
+                        'handbook.getRecords',
+                        'record',
+                        '',
+                        api_additionally='<handbook><id>' + str(handbook) + '</id></handbook><parentKey>' + str(record)
+                                         + '</parentKey>',
+                        with_totalcount=False,
+                        key_name='key')
+                    for record2lvl in records_loaded:
+                        records_loaded[record2lvl]['parentName'] = records1lvl[record]['name']
+                    for record2lvl in records_loaded:
+                        records2lvl[record2lvl] = records_loaded[record2lvl]
+                    q=0
+                else:
+                    if records1lvl[record].get('customData', None):
+                        if records1lvl[record]['customData'].get('customValue', None):
+                            handbooks[handbook][int(record)] = {}
+                            if str(type(records1lvl[record]['customData']['customValue'])).replace("'", '')\
+                                    == '<class list>':
+                                for field in records1lvl[record]['customData']['customValue']:
+                                    handbooks[handbook][int(record)][int(field['field']['id'])] = {
+                                        'text': field['text'],
+                                        'value': field['value']
+                                    }
+                            else:
+                                handbooks[handbook][int(record)][int(records1lvl[record]['customData']['customValue']['field']['id'])] = {
+                                    'text': records1lvl[record]['customData']['customValue']['text'],
+                                    'value': records1lvl[record]['customData']['customValue']['value']
+                                }
+
+            for record in records2lvl:
+                if records2lvl[record]['isGroup'] == '1':
+                    records_loaded = api_load_from_list(
+                        'handbook.getRecords',
+                        'record',
+                        '',
+                        api_additionally='<handbook><id>' + str(handbook) + '</id></handbook><parentKey>' + str(record)
+                                         + '</parentKey>',
+                        with_totalcount=False,
+                        key_name='key')
+                    for record3lvl in records_loaded:
+                        records_loaded[record3lvl]['parentName'] = \
+                            records2lvl[int(records_loaded[record3lvl]['parentKey'])]['parentName'] \
+                            + '/' + records2lvl[record]['name']
+                    for record3lvl in records_loaded:
+                        records3lvl[record3lvl] = records_loaded[record3lvl]
+                    q=0
+                else:
+                    if records2lvl[record].get('customData', None):
+                        if records2lvl[record]['customData'].get('customValue', None):
+                            handbooks[handbook][int(record)] = {
+                                0: {
+                                    'value': records2lvl[record]['parentKey'],
+                                    'text': records2lvl[record]['parentName']
+                                    }
+                            }
+                            if str(type(records2lvl[record]['customData']['customValue'])).replace("'", '')\
+                                    == '<class list>':
+                                for field in records2lvl[record]['customData']['customValue']:
+                                    handbooks[handbook][int(record)][int(field['field']['id'])] = {
+                                        'text': field['text'],
+                                        'value': field['value']
+                                    }
+                            else:
+                                handbooks[handbook][int(record)][int(records2lvl[record]['customData']['customValue']['field']['id'])] = {
+                                    'text': records2lvl[record]['customData']['customValue']['text'],
+                                    'value': records2lvl[record]['customData']['customValue']['value']
+                                }
+            for record in records3lvl:
+                if records3lvl[record]['isGroup'] == '1':
+                    print('4 уровень не поддерживается!!!', handbook, record)
+                else:
+                    if records3lvl[record].get('customData', None):
+                        if records3lvl[record]['customData'].get('customValue', None):
+                            handbooks[handbook][int(record)] = {
+                                0: {
+                                    'value': records3lvl[record]['parentKey'],
+                                    'text': records3lvl[record]['parentName']
+                                    }
+                            }
+                            if str(type(records3lvl[record]['customData']['customValue'])).replace("'", '')\
+                                    == '<class list>':
+                                for field in records3lvl[record]['customData']['customValue']:
+                                    handbooks[handbook][int(record)][int(field['field']['id'])] = {
+                                        'text': field['text'],
+                                        'value': field['value']
+                                    }
+                            else:
+                                handbooks[handbook][int(record)][int(records3lvl[record]['customData']['customValue']['field']['id'])] = {
+                                    'text': records3lvl[record]['customData']['customValue']['text'],
+                                    'value': records3lvl[record]['customData']['customValue']['value']
+                                }
+
+            if len(argv) == 1:
+                printProgressBar(i, len(handbooks) + 1, prefix='Скачаны все записи по:', suffix='справочников',
+                                 length=50)
+        for handbook in handbooks_with_category:
+            for record in handbooks[handbook]:
+                if not handbooks[handbook][record].get(0, False):
+                    handbooks[handbook][record][0] = {
+                        'text': 'б/к',
+                        'value': 0
+                    }
+
+        with open(os.path.join(PF_BACKUP_DIRECTORY, 'handbooks_full.json'), 'w') as write_file:
+            json.dump(handbooks, write_file, ensure_ascii=False)
 
     # =============== ЗАДАЧИ ==========================
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
@@ -481,23 +612,6 @@ def reload_all():
                        api_additionally='<target>template</target>')
 
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
-          'Получаем из АПИ список справочников')
-    handbooks = api_load_from_list('handbook.getList', 'handbook', '', pagination=False)
-    if not limit_overflow:
-        if len(argv) == 1:
-            printProgressBar(0, len(handbooks) + 1, prefix='Скачаны все записи по:', suffix='справочников', length=50)
-        for i, handbook in enumerate(handbooks):
-            addition_text = '<handbook><id>' + str(handbook) + '</id></handbook>'
-            records = api_load_from_list('handbook.getRecords', 'record', '',
-                                         api_additionally=addition_text, with_totalcount=False, key_name='key')
-            handbooks[handbook]['records'] = records
-            if len(argv) == 1:
-                printProgressBar(i, len(handbooks) + 1, prefix='Скачаны все записи по:', suffix='справочников',
-                                 length=50)
-        with open(os.path.join(PF_BACKUP_DIRECTORY, 'handbooks_full.json'), 'w') as write_file:
-            json.dump(handbooks, write_file, ensure_ascii=False)
-
-    print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
           'Получаем из АПИ список процессов')
     processes = api_load_from_list('taskStatus.getSetList', 'taskStatusSet', 'processes_full.json',
                                    pagination=False)
@@ -623,12 +737,6 @@ if __name__ == "__main__":
     reload_all()
     if os.path.exists(DIR4FILES):
         if not limit_overflow:
-            # Копируем скачанные из АПИ JSON
-            data_directory = os.path.join(DIR4JSONS, datetime.now().strftime("%Y-%m-%d"))
-            os.mkdir(data_directory)
-            for file in os.listdir(PF_BACKUP_DIRECTORY):
-                shutil.copy(file, data_directory)
-
             # Обнуляем пути к файлу на диске
             for file in files:
                 files[file]['full_path'] = ''  # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -792,6 +900,12 @@ if __name__ == "__main__":
             with open(os.path.join(PF_BACKUP_DIRECTORY, 'files_from_disk.json'), 'w') as write_file:
                 json.dump(files_from_disk, write_file, ensure_ascii=False)
             files_from_disk = tuple(sorted(files_from_disk))
+
+            # Копируем скачанные из АПИ JSON
+            data_directory = os.path.join(DIR4JSONS, datetime.now().strftime("%Y-%m-%d"))
+            os.mkdir(data_directory)
+            for file in os.listdir(PF_BACKUP_DIRECTORY):
+                shutil.copy(os.path.join(PF_BACKUP_DIRECTORY, file), data_directory)
         else:
             print('\n', datetime.now().strftime("%H:%M:%S"), 'Неполное обновление - обновление файлов ПРОПУЩЕНО')
     else:
