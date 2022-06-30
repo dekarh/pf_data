@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Общая библиотека функций
-# ver 1.13
+# ver 1.14
 
 import string
 import re
@@ -31,16 +31,16 @@ def l(a):               # белиберду в цифры или 0
     except TypeError:
         return 0
 
-def fl(a):               # белиберду в float или строку (заменяем , на . и пробелы на '')
-    if a == None:
-        return ''
-    elif s(a).find(',') > -1 or s(a).find('.') > -1:
+def fl(a):               # белиберду в float (заменяем , на . и пробелы на '')
+    a_str = s(a)
+    a_str_dig = ''.join([char for char in a_str if char in string.digits + '.,'])
+    if a_str_dig.find(',') > -1 or s(a).find('.') > -1:
         try:
             return float(str(a).replace(',','.').replace(' ',''))
         except ValueError:
-            return a
+            return float(0)
     else:
-        return a
+        return float(0)
 
 def s(a):                   # белиберду в строку
     try:

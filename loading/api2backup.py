@@ -215,9 +215,10 @@ def reload_all():
             handbooks[handbook] = {}
             records2lvl = {}
             records3lvl = {}
-            
+            # Первый уровень записей справочника
             for record in records1lvl:
                 if records1lvl[record]['isGroup'] == '1':
+                    # Если группа, то загружаем ее для подгрузки на втором уровне
                     handbooks_with_category.add(handbook)
                     records_loaded = api_load_from_list(
                         'handbook.getRecords',
@@ -231,7 +232,6 @@ def reload_all():
                         records_loaded[record2lvl]['parentName'] = records1lvl[record]['name']
                     for record2lvl in records_loaded:
                         records2lvl[record2lvl] = records_loaded[record2lvl]
-                    q=0
                 else:
                     if records1lvl[record].get('customData', None):
                         if records1lvl[record]['customData'].get('customValue', None):
@@ -248,9 +248,10 @@ def reload_all():
                                     'text': records1lvl[record]['customData']['customValue']['text'],
                                     'value': records1lvl[record]['customData']['customValue']['value']
                                 }
-
+            # Второй уровень записей справочника
             for record in records2lvl:
                 if records2lvl[record]['isGroup'] == '1':
+                    # Если группа, то загружаем ее для подгрузки на третьем уровне
                     records_loaded = api_load_from_list(
                         'handbook.getRecords',
                         'record',
@@ -265,7 +266,6 @@ def reload_all():
                             + '/' + records2lvl[record]['name']
                     for record3lvl in records_loaded:
                         records3lvl[record3lvl] = records_loaded[record3lvl]
-                    q=0
                 else:
                     if records2lvl[record].get('customData', None):
                         if records2lvl[record]['customData'].get('customValue', None):
@@ -287,7 +287,9 @@ def reload_all():
                                     'text': records2lvl[record]['customData']['customValue']['text'],
                                     'value': records2lvl[record]['customData']['customValue']['value']
                                 }
+            # Третий уровень записей справочника
             for record in records3lvl:
+                # Если группа, то четвертый уровень не поддерживается
                 if records3lvl[record]['isGroup'] == '1':
                     print('4 уровень не поддерживается!!!', handbook, record)
                 else:
@@ -320,7 +322,7 @@ def reload_all():
                 if not handbooks[handbook][record].get(0, False):
                     handbooks[handbook][record][0] = {
                         'text': 'б/к',
-                        'value': 0
+                        'value': 'б/к'
                     }
 
         with open(os.path.join(PF_BACKUP_DIRECTORY, 'handbooks_full.json'), 'w') as write_file:
