@@ -9,7 +9,7 @@ import csv
 from datetime import datetime, timedelta
 
 from lib import format_phone, l
-from hide_data import USR_Tocken, PSR_Tocken, PF_ACCOUNT, DEPARTMENTS, OFFICETOWNS
+from hide_data import USR_Tocken, PSR_Tocken, PF_ACCOUNT, DEPARTMENTS, OFFICETOWNS, DOMAIN
 from api2backup import reload_all, api_load_from_list
 
 URL = "https://apiru.planfix.ru/xml"
@@ -106,7 +106,7 @@ def chk_users(id):
 
 
 if __name__ == "__main__":
-    # Перезагружаем всё в файлы
+    # Перезагружаем всё из АПИ в файлы
     if RELOAD_ALL_FROM_API:
         request_count = 0
         limit_overflow = False
@@ -134,46 +134,53 @@ if __name__ == "__main__":
     for user in users_list:
         if user.get('email', None) or user.get('name', '') == 'робот ПланФикса':
             if user.get('name', '') == 'робот ПланФикса':
-                user['email'] = 'robot_pf@finfort.ru'
-            if user['midName']:
-                employees2mails[user['email']] = {'name': str(user['lastName']) + ' ' + str(user['name']) + ' '
-                                                    + str(user['midName'])}
-                users2mails[user['email']] = {'name': str(user['lastName']) + ' ' + str(user['name']) + ' '
-                                                    + str(user['midName'])}
-                users2groups[user['email']] = set()
+                user_email = 'robot_pf@odoo.' + DOMAIN
             else:
-                employees2mails[user['email']] = {'name': str(user['lastName']) + ' ' + str(user['name'])}
-                users2mails[user['email']] = {'name': str(user['lastName']) + ' ' + str(user['name'])}
-                users2groups[user['email']] = set()
-            users2mails[user['email']]['login'] = user['email']
-            employees2mails[user['email']]['work_email'] = user['email']
+                if user['email'].find('_old@'+ DOMAIN) > -1:
+                    user_email = user['email'].replace('_old@' + DOMAIN, '@odoo.' + DOMAIN)
+                elif user['email'].find('@'+ DOMAIN) > -1:
+                    user_email = user['email'].replace('@' + DOMAIN, '@odoo.' + DOMAIN)
+                else:
+                    user_email = user['email'].replace('_old@','@').split('@')[0] + '@odoo.' + DOMAIN
+            if user['midName']:
+                employees2mails[user_email] = {'name': str(user['lastName']) + ' ' + str(user['name']) + ' '
+                                                    + str(user['midName'])}
+                users2mails[user_email] = {'name': str(user['lastName']) + ' ' + str(user['name']) + ' '
+                                                    + str(user['midName'])}
+                users2groups[user_email] = set()
+            else:
+                employees2mails[user_email] = {'name': str(user['lastName']) + ' ' + str(user['name'])}
+                users2mails[user_email] = {'name': str(user['lastName']) + ' ' + str(user['name'])}
+                users2groups[user_email] = set()
+            users2mails[user_email]['login'] = user_email
+            employees2mails[user_email]['work_email'] = user_email
             if user.get('phones', None):
                 if user['phones']:
                     if str(type(user['phones']['phone'])).find('list') > -1:
-                        employees2mails[user['email']]['mobile_phone'] = \
+                        employees2mails[user_email]['mobile_phone'] = \
                             str(format_phone(user['phones']['phone'][0]['number']))
                     else:
-                        employees2mails[user['email']]['mobile_phone'] = str(format_phone(user['phones']['phone']['number']))
+                        employees2mails[user_email]['mobile_phone'] = str(format_phone(user['phones']['phone']['number']))
             if user.get('sex', None):
-                employees2mails[user['email']]['gender'] = str(user['sex']).lower()
+                employees2mails[user_email]['gender'] = str(user['sex']).lower()
             if user.get('id', None):
-                users2mails[user['email']]['id_pf'] = str(user['id'])
+                users2mails[user_email]['id_pf'] = str(user['id'])
             if user.get('general', None):
-                users2mails[user['email']]['general_user_pf'] = str(user['general'])
+                users2mails[user_email]['general_user_pf'] = str(user['general'])
             if user.get('active', None):
-                users2mails[user['email']]['active'] = str(user['status'] == 'ACTIVE')
+                users2mails[user_email]['active'] = str(user['status'] == 'ACTIVE')
             if user.get('userGroups', None):
                 if str(type(user['userGroups']['userGroup'])).find('list') > -1:
                     for group in user['userGroups']['userGroup']:
-                        groups_id2members[group['id']] += [user['email']]
-                        users2groups[user['email']].add(group['id'])
+                        groups_id2members[group['id']] += [user_email]
+                        users2groups[user_email].add(group['id'])
                 else:
-                    groups_id2members[user['userGroups']['userGroup']['id']] += [user['email']]
+                    groups_id2members[user['userGroups']['userGroup']['id']] += [user_email]
         else:
             print(str(user['id']), str(user['lastName']), str(user['name']), str(user['midName']), ' - нет e-mail')
 
     # Загружаем данные сотрудников из файла
-    with open(os.path.join(BACKUP_DIRECTORY, 'contacts_finfort.json'), 'r') as read_file:
+    with open(os.path.join(BACKUP_DIRECTORY, 'contacts_' + PF_ACCOUNT + '.json'), 'r') as read_file:
         contacts_loaded = json.load(read_file)
     contacts_list = list(contacts_loaded.values())
     contacts_db = {}
@@ -182,7 +189,12 @@ if __name__ == "__main__":
         mail = ''
         for field in contact['customData']['customValue']:
             if field['field']['name'] == 'Корпоративная почта':
-                mail = field['text']
+                if field['text'].find('_old@' + DOMAIN) > -1:
+                    mail = field['text'].replace('_old@' + DOMAIN, '@odoo.' + DOMAIN)
+                elif field['text'].find('@' + DOMAIN) > -1:
+                    mail = field['text'].replace('@' +DOMAIN, '@odoo.' + DOMAIN)
+                else:
+                    mail = field['text'].replace('_old@','@').split('@')[0] + '@odoo.' + DOMAIN
         if mail:
             contacts_db[mail] = contact
             if not employees2mails.get(mail, None):
@@ -317,6 +329,24 @@ if __name__ == "__main__":
         writer.writeheader()
         for mail in users2mails:
             writer.writerow(users4csv[mail])
+
+    # Контакты сотрудников в res.partners.csv - указываем что это не customer не supplier
+    partners4csv = {}
+    for mail in users2mails:
+        partners4csv[mail] = {}
+        for field in users2mails[mail].keys():
+            if field in ['id', 'is_company', 'customer', 'supplier']:
+                if field == 'id':
+                    partners4csv[mail][field] = 'docflow.' + users2mails[mail][field] + '_res_partner'
+                    partners4csv[mail]['email'] = mail
+                    partners4csv[mail]['is_company'] = False
+                    partners4csv[mail]['customer'] = False
+                    partners4csv[mail]['supplier'] = False
+    with open(os.path.join(PF_DATA, 'res.partner.csv'), 'w', newline='') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=['id', 'email', 'is_company', 'customer', 'supplier'])
+        writer.writeheader()
+        for mail in users2mails:
+            writer.writerow(partners4csv[mail])
 
     # Сотрудники в .xml
     for emloyee in employees4flectra:

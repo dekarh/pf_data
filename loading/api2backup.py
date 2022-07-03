@@ -10,7 +10,7 @@ from  sys import argv
 import shutil
 from datetime import datetime, timedelta
 
-from hide_data import USR_Tocken, PSR_Tocken, PF_ACCOUNT
+from hide_data import USR_Tocken, PSR_Tocken, PF_ACCOUNT, PF_DOMAIN
 
 URL = "https://apiru.planfix.ru/xml"
 PF_BACKUP_DIRECTORY = 'current'
@@ -607,7 +607,7 @@ def reload_all():
     print('\n', datetime.now().strftime('%d.%m.%Y %H:%M:%S'), '|',request_count, '|',
           'Получаем из АПИ юзеров, сотрудников, контакты, группы доступа и шаблоны задач')
     api_load_from_list('user.getList', 'user', 'users_full.json')
-    api_load_from_list('contact.getList', 'contact', 'contacts_finfort.json' ,
+    api_load_from_list('contact.getList', 'contact', 'contacts_' + PF_ACCOUNT + '.json' ,
                        api_additionally='<target>6532326</target>')
     api_load_from_list('userGroup.getList', 'userGroup', 'usergroups_full.json')
     api_load_from_list('task.getList', 'task', 'tasktemplates_full.json',
@@ -671,7 +671,7 @@ def download_file(rez_str, downloaded_files_ids):
         repit = 0
         skipping = False
         while not downloaded:
-            if not str(file['downloadLink']).startswith('https://finfort.planfix.ru'):
+            if not str(file['downloadLink']).startswith(PF_DOMAIN):
                 answer = file['downloadLink']
                 downloaded_files_ids += [int(file['id'])]
                 skipping = True
