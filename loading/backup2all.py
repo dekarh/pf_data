@@ -56,10 +56,15 @@ def create_record(id, model, sources):
     return record
 
 
-def dict_key(key, test_dict):
-    """ Проверяет наличие test_dict[key]. Если есть - возвращает key, если нет - '' """
+def dict_key(key, test_dict, process_index=False):
+    """  Проверяет наличие test_dict[key]. Если есть - возвращает key, если нет - ''
+    process_index=True - если есть, то возвращает строку, состояющую только из цифр
+    """
     if test_dict.get(key ,None):
-        return key
+        if process_index:
+            return processes4flectra[key]['name'].split('(')[1].split(')')[0]
+        else:
+            return key
     else:
         return ''
 
@@ -244,18 +249,27 @@ if __name__ == "__main__":
 
     i = 1
     employees4flectra = {}
+    employees4backup = {}
     for mail in employees2mails:
         if users2mails.get(mail, None):
             if users2mails[mail].get('id_pf', None):
                 employees4flectra['empl_' + users2mails[mail]['id_pf']] = employees2mails[mail]
                 employees4flectra['empl_' + users2mails[mail]['id_pf']]['id_pf'] = users2mails[mail]['id_pf']
+                employees4backup[users2mails[mail]['id_pf']] = employees2mails[mail]
+                employees4backup[users2mails[mail]['id_pf']]['id_pf'] = users2mails[mail]['id_pf']
             elif users2mails[mail].get('userid_pf', None):
                 employees4flectra['empl_' + users2mails[mail]['userid_pf']] = employees2mails[mail]
                 employees4flectra['empl_' + users2mails[mail]['userid_pf']]['id_pf'] = users2mails[mail]['userid_pf']
+                employees4backup[users2mails[mail]['userid_pf']] = employees2mails[mail]
+                employees4backup[users2mails[mail]['userid_pf']]['id_pf'] = users2mails[mail]['userid_pf']
             else:
                 employees4flectra['empl_' + str(i)] = employees2mails[mail]
                 employees4flectra['empl_' + str(i)]['id_pf'] = str(i)
+                employees4backup[str(i)] = employees2mails[mail]
+                employees4backup[str(i)]['id_pf'] = str(i)
                 i += 1
+    with open(os.path.join(BACKUP_DIRECTORY, 'emloyees_' + PF_ACCOUNT + '.json'), 'w') as write_file:
+            json.dump(employees4backup, write_file, ensure_ascii=False)
 
     # Заголовок xml
     flectra_root = objectify.Element('flectra')
@@ -330,7 +344,7 @@ if __name__ == "__main__":
         for mail in users2mails:
             writer.writerow(users4csv[mail])
 
-    # Контакты сотрудников в res.partners.csv - указываем что это не customer не supplier
+    # Контакты сотрудников в res.partners.csv + указываем что это не customer не supplier
     partners4csv = {}
     for mail in users2mails:
         partners4csv[mail] = {}
@@ -434,7 +448,9 @@ if __name__ == "__main__":
                 'name': task['title'],
                 'description': task['description'],
                 'project_id': dict_key('pr_' + task['statusSet'], processes4flectra),
-                'stage_id': dict_key('st_' + task['status'], statuses4flectra),
+                'stage_id': dict_key(
+                    'st_' + task['status'] + dict_key('pr_' + task['statusSet'], processes4flectra, process_index=True),
+                    statuses4flectra),
                 'create_date': str(task['beginDateTime']).replace('-', '.') + ':00',
                 'user_id': 'docflow.user_' + chk_users(task['owner']['id']),
                 'employee_id':  'pf_data.empl_' + chk_users(task['owner']['id']),
